@@ -238,6 +238,7 @@ write_str32 :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 // write string and choose format automaticall based on length
 write_string :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	length := len(text)
+	fmt.println("length of string", length)
 	data := mem.raw_string_data(text)
 	
 	if length < 32 {
@@ -391,7 +392,10 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 
 		case runtime.Type_Info_String: {
 			switch s in a {
-				case string: return write_string(ctx, s)
+				case string: {
+					fmt.println("string", v, a, info, s)
+					return write_string(ctx, s)
+				}
 				case cstring: return write_string(ctx, string(s))
 			}
 		}
@@ -462,6 +466,8 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 			ed := runtime.type_info_base(gs.types[1]).variant.(runtime.Type_Info_Dynamic_Array)
 			entry_type := ed.elem.variant.(runtime.Type_Info_Struct)
 			entry_size := ed.elem_size
+			fmt.println("entries", entries, ed.elem.id, ed.elem_size)
+			fmt.println(info.key.id, info.value.id)
 
 			// write entry info formats
 			_write_map_format(ctx, entries.len) or_return
@@ -485,9 +491,26 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 		}
 
 		case runtime.Type_Info_Struct: {
-			_write_map_format(ctx, len(info.names)) or_return
+			end_map_length := len(info.names)
+			tags_empty := len(info.tags) == 0
+			if !tags_empty {
+				for tag in info.tags {
+					if tag == "skip" {
+						end_map_length -= 1	
+					}
+				}
+			}
 
-			for name, i in info.names {
+			_write_map_format(ctx, end_map_length) or_return
+
+			struct_loop: for name, i in info.names {
+				if !tags_empty {
+					if info.tags[i] == "skip" {
+						fmt.println("skip", info.tags[i], info.names[i], info.types[i])
+						continue struct_loop
+					}
+				}
+
 				write_string(ctx, name) or_return
 
 				id := info.types[i].id
@@ -498,7 +521,13 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 			return .None
 		}
 
+		case runtime.Type_Info_Type_Id: {
+			write_nil(ctx) or_return
+			return .None
+		}
+
 		case: {
+			fmt.println("ANY_TYPE_UNSUPPORTED", v, a)
 			return .Any_Type_Unsupported
 		}
 	}
