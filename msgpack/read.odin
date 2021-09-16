@@ -8,6 +8,7 @@ Read_Context :: struct {
 	start: []byte,
 	input: []byte,
 	current_format: Format,
+	typeids: [dynamic]typeid,
 }
 
 read_context_init :: proc(input: []byte) -> Read_Context {
@@ -15,6 +16,14 @@ read_context_init :: proc(input: []byte) -> Read_Context {
 		start = input,
 		input = input, 
 	}
+}
+
+read_context_destroy :: proc(using ctx: ^Read_Context) {
+	delete(typeids)
+}
+
+read_context_add_typeid :: proc(using ctx: ^Read_Context, type: typeid) {
+	append(&typeids, type)
 }
 
 // clamps input to Format ranges
@@ -311,4 +320,10 @@ read_map :: proc(using ctx: ^Read_Context) -> (length: int) {
 	}
 
 	panic("READ MAP WRONG FORMAT")
+}
+
+read_typeid :: proc(ctx: ^Read_Context) -> typeid {
+	assert(len(ctx.typeids) != 0)
+	value := read_uint8(ctx)
+	return ctx.typeids[value]
 }

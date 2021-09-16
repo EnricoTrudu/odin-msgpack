@@ -1,6 +1,7 @@
 package msgpack
 
 import "core:fmt"
+import "core:os"
 import "core:mem"
 import "core:strings"
 
@@ -71,7 +72,6 @@ _fix_ext_size :: #force_inline proc(format: Format) -> int {
 	panic("wrong format")
 }
 
-import "core:os"
 test :: proc() -> Write_Error {
 	ctx := write_context_scoped(mem.kilobytes(1))
 
@@ -197,4 +197,3 @@ test_struct :: proc(ctx: ^Write_Context) -> Write_Error {
 
 	return .None
 }
-

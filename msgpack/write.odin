@@ -9,6 +9,7 @@ import "core:reflect"
 Write_Context :: struct {
 	start: []byte,
 	output: []byte,
+	typeid_map: map[typeid]u8,
 }
 
 Write_Error :: enum {
@@ -20,6 +21,8 @@ Write_Error :: enum {
 	Overflow_Array,	    // spec: non supported array      length
 	Overflow_Map,       // spec: non supported array      length
 	Overflow_Extension, // spec: non supported extensions length
+
+	Type_Id_Unsupported,
 
 	Any_Type_Unsupported,
 	Any_Type_Not_Array,
@@ -43,6 +46,11 @@ write_context_init :: proc(cap: int) -> (result: Write_Context) {
 
 write_context_destroy :: proc(ctx: ^Write_Context) {
 	delete(ctx.start)
+	delete(ctx.typeid_map)
+}
+
+write_context_add_typeid :: proc(using ctx: ^Write_Context, type: typeid) {
+	typeid_map[type] = u8(len(typeid_map))
 }
 
 // write a single byte into output
@@ -238,7 +246,6 @@ write_str32 :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 // write string and choose format automaticall based on length
 write_string :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	length := len(text)
-	fmt.println("length of string", length)
 	data := mem.raw_string_data(text)
 	
 	if length < 32 {
@@ -522,7 +529,8 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 		}
 
 		case runtime.Type_Info_Type_Id: {
-			write_nil(ctx) or_return
+			type := a.(typeid)
+			write_typeid(ctx, type)
 			return .None
 		}
 
@@ -583,4 +591,15 @@ write_timestamp96 :: proc(ctx: ^Write_Context, nanoseconds: u32, seconds: u64) -
 	bytes: [12]byte
 	write_ext_format(ctx, -1, len(bytes))
 	return write_bytes(ctx, &bytes[0], len(bytes))
+}
+
+write_typeid :: proc(using ctx: ^Write_Context, type: typeid) -> Write_Error {
+	assert(len(typeid_map) != 0)
+
+	if type not_in typeid_map {
+		return .Type_Id_Unsupported
+	}
+
+	id := typeid_map[type]
+	return write_uint8(ctx, id)
 }

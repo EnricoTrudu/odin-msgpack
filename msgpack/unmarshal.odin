@@ -440,30 +440,34 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			defer fmt.println("end")
 
 			header := runtime.Map_Header {m = m}
-			header.equal = intrinsics.type_equal_proc(info.key.id)
+			// header.equal = intrinsics.type_equal_proc(info.key.id)
 
 			header.entry_size    = entry_size
-			// header.entry_align   = entry_align
+			// header.entry_align   = entry_type.align
 			header.entry_align   = 0
-			// TODO align
 
-			header.key_offset    = ed.offsets[2]
-			header.key_size      = info.key.elem_size
+			header.key_offset    = entry_type.offsets[2]
+			key_size := info.key.size
+			header.key_size      = key_size
 
-			header.value_offset  = ed.offsets[3]
-			header.value_size    = info.value.elem_size
+			value_size := info.value.size
+			header.value_offset  = entry_type.offsets[3]
+			header.value_size    = value_size
 
-			// return header
+			runtime.__dynamic_map_reserve(header, length)
+			// runtime.__dynamic_map_grow(header)
 
-			// test := runtime.__get_map_header(info)
-
-			// hash := __get_map_hash(&key)
-			// data := uintptr(__dynamic_map_set(h, hash, &value, loc))
-
+			// entry_header := runtime.Map_Entry_Header(header,)
 
 			// for i in 0..<length {
-			// 	unmarshal
+			// 	data := uintptr(entries.data) + uintptr(i * entry_size)
+			// 	key := rawptr(data + entry_type.offsets[2])
+			// 	value := rawptr(data + entry_type.offsets[3])
+			
+			// 	unmarshal(ctx, any { key, info.key.id }, allocator)
+			// 	unmarshal(ctx, any { value, info.value.id }, allocator)
 			// }
+
 
 			// // write key value pair per entry
 			// for i in 0..<entries.len {
@@ -474,6 +478,13 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			// 	unmarshal(ctx, any{ key, info.key.id }, allocator)
 			// 	unmarshal(ctx, any{ value, info.value.id }, allocator)
 			// }
+		}
+
+		case runtime.Type_Info_Type_Id: {
+			assert(len(ctx.typeids) != 0)
+			ptr := cast(^typeid) a.data
+			type := read_typeid(ctx)
+			ptr^ = type
 		}
 
 		case runtime.Type_Info_Struct: {
@@ -493,7 +504,7 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 				// has to be a valid string value, otherwhise doesnt match struct write_any  
 				if current_is_string(ctx) {
 					text := read_string(ctx)
-					fmt.println("SEARCH", text, length_count)
+					// fmt.println("SEARCH", text, length_count)
 
 					name_search: for name, i in info.names {
 						// if !tags_empty && info.tags[i] == "skip" {
@@ -596,3 +607,8 @@ _reserve_memory_any_dynamic_array :: proc(array: ^mem.Raw_Dynamic_Array, type: t
 _reserve_memory_any_map :: proc(header, key, value: typeid, capacity: int, loc := #caller_location) {
 		
 }
+
+// map_insert_any :: proc(raw_map: ^runtime.Raw_Map, key, value: any) {
+		
+// }
+
