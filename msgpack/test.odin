@@ -4,12 +4,12 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 
-// NOTE these are tests special read / writes and the automated write_any / unmarshall 
+// NOTE these are tests special read / writes and the automated write_any / unmarshall  or_return
 
 // helper to write / read back results
 test_read_write :: proc(
 	write: proc(ctx: ^Write_Context) -> Write_Error, 
-	read: proc(ctx: ^Read_Context),
+	read: proc(ctx: ^Read_Context) -> Read_Error,
 	capacity: int,
 ) {
 	write_ctx := write_context_scoped(capacity)
@@ -25,7 +25,10 @@ test_read_write :: proc(
 
 	read_ctx := read_context_init(bytes)
 	defer read_context_destroy(&read_ctx)
-	read(&read_ctx)
+	read_err := read(&read_ctx)
+	if read_err != .None {
+		fmt.panicf("READ FAILED: %v", read_err)
+	}
 }
 
 test_typeid :: proc() {
@@ -36,14 +39,15 @@ test_typeid :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		read_context_add_typeid(ctx, int)
 		read_context_add_typeid(ctx, u8)
 
 		test: typeid
 		fmt.println("before", test)
-		test = read_typeid(ctx)
+		test = read_typeid(ctx) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -68,14 +72,15 @@ test_typeid_any :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		read_context_add_typeid(ctx, int)
 		read_context_add_typeid(ctx, u8)
 
 		test: Test
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -91,11 +96,12 @@ test_dynamic_array :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [dynamic]int
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -112,11 +118,12 @@ test_binary_dynamic_array :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [dynamic]u8
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -132,18 +139,20 @@ test_array_any :: proc() {
 		return .None
 	}
 
-	read_bad_size :: proc(ctx: ^Read_Context) {
+	read_bad_size :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [8]int
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 	
-	read_same_size :: proc(ctx: ^Read_Context) {
+	read_same_size :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [10]int
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read_bad_size, mem.kilobytes(1))		
@@ -159,11 +168,12 @@ test_binary_array :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [10]u8
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))		
@@ -178,11 +188,12 @@ test_slice_any :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: []int
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))		
@@ -198,11 +209,12 @@ test_binary_slice_any :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: []u8
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -217,11 +229,12 @@ test_different_types_array :: proc() {
 		return .None
 	}
 
-	read :: proc(ctx: ^Read_Context) {
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [3]i8
 		fmt.println("before", test)
-		unmarshall(ctx, test)
+		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
+		return .None
 	}
 
 	test_read_write(write, read, mem.kilobytes(1))
@@ -258,7 +271,7 @@ test_different_types_array :: proc() {
 // 		// test: map[string]int
 // 		test: map[int]u8
 // 		fmt.println("before", test)
-// 		msgpack.unmarshall(&read_ctx, test)
+// 		msgpack.unmarshall(&read_ctx, test) or_return
 // 		fmt.println("after", test, len(test), cap(test))
 // 	}
 // }
