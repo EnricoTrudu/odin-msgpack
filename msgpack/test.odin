@@ -24,6 +24,7 @@ test_read_write :: proc(
 	os.write_entire_file("test.bin", bytes)
 
 	read_ctx := read_context_init(bytes)
+	read_ctx.decoding = .Strict
 	defer read_context_destroy(&read_ctx)
 	read_err := read(&read_ctx)
 	if read_err != .None {

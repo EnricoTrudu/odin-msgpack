@@ -15,7 +15,8 @@ import "core:intrinsics"
 // TODO replace this with individual skips, will be faster
 // read format and advance without caring about return value
 _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
-	ctx.current_format = format_clamp(input[0])
+	b := read_byte(ctx) or_return
+	ctx.current_format = format_clamp(b)
 
 	#partial switch ctx.current_format {
 		case .Nil, .False, .True, .Positive_Fix_Int, .Negative_Fix_Int: {
@@ -221,17 +222,19 @@ current_is_string :: proc(ctx: ^Read_Context) -> bool {
 
 // iterate through array content uintptrs
 // similar to _write_array_any
-_unmarshall_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) {
+_unmarshall_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) -> Read_Error {
 	for i in 0..<length {
 		data := root + uintptr(i * offset_size)
-		unmarshall(ctx, any { rawptr(data), id }, allocator)
+		unmarshall(ctx, any { rawptr(data), id }, allocator) or_return
 	}
+
+	return .None
 }
 
 // assumes current_is_array previously
 // length of array read previously
 array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err: Read_Error) {
-	temp := ctx
+	old := ctx.input
 	ok = true
 
 	if length == 1 {
@@ -240,16 +243,22 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 
 	previous_format: Format
 	for i in 0..<length {
-		if i != 0  && previous_format != temp.current_format {
+		previous_format = ctx.current_format
+		_skip_any(ctx) or_return
+		
+		if i != 0 && previous_format != ctx.current_format {
+			fmt.println("prev", previous_format, ctx.current_format)
 			ok = false
-			return
 		}
-
-		previous_format = temp.current_format
-		_skip_any(temp) or_return
 	}
 
-	return
+	if !ok {
+		return
+	}
+
+	// if all the same, reset input
+	ctx.input = old
+	return 
 }
 
 // unmarshall incoming any to exact type in ctx.current_format
@@ -262,7 +271,8 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 		return
 	}
 
-	ctx.current_format = format_clamp(input[0])
+	b := read_byte(ctx) or_return
+	ctx.current_format = format_clamp(b)
 	fmt.println("current:", ctx.current_format, v, ti.id)
 
 	#partial switch info in ti.variant {
@@ -275,19 +285,19 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			#partial switch ctx.current_format {
 				case .Positive_Fix_Int, .Negative_Fix_Int, .Int8, .Int16, .Int32, .Int64: {
 					switch i in a {
-						case i8: _unmarshall_i8(ctx, v)
-						case i16, i16le, i16be: _unmarshall_i16(ctx, v, a)
-						case i32, i32le, i32be: _unmarshall_i32(ctx, v, a)
-						case i64, i64le, i64be, int: _unmarshall_i64(ctx, v, a)
+						case i8: _unmarshall_i8(ctx, v) or_return
+						case i16, i16le, i16be: _unmarshall_i16(ctx, v, a) or_return
+						case i32, i32le, i32be: _unmarshall_i32(ctx, v, a) or_return
+						case i64, i64le, i64be, int: _unmarshall_i64(ctx, v, a) or_return
 					}
 				}
 
 				case .Uint8, .Uint16, .Uint32, .Uint64: {
 					switch i in a {
-						case u8: _unmarshall_u8(ctx, v)
-						case u16, u16le, u16be: _unmarshall_u16(ctx, v, a)
-						case u32, u32le, u32be: _unmarshall_u32(ctx, v, a)
-						case u64, u64le, u64be, uint: _unmarshall_u64(ctx, v, a)
+						case u8: _unmarshall_u8(ctx, v) or_return
+						case u16, u16le, u16be: _unmarshall_u16(ctx, v, a) or_return
+						case u32, u32le, u32be: _unmarshall_u32(ctx, v, a) or_return
+						case u64, u64le, u64be, uint: _unmarshall_u64(ctx, v, a) or_return
 					}
 				}
 
@@ -376,7 +386,15 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 
 					// NOTE read has to match array count
 					if length == info.count {
-						_unmarshall_array(ctx, length, uintptr(v.data), info.elem_size, info.elem.id)
+						// when values arent the same type, skip all content
+						if ctx.decoding == .Strict {
+							same := array_has_same_types(ctx, length) or_return
+							if !same {
+								return
+							}
+						}
+
+						_unmarshall_array(ctx, length, uintptr(v.data), info.elem_size, info.elem.id) or_return
 					} else {
 						// else skip each any
 						for i in 0..<length {
@@ -423,7 +441,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 
 					// create new slice with element id, unmarshall content
 					make_slice_raw(raw_slice, info.elem.id, length, info.elem.align, allocator)
-					_unmarshall_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id)
+					_unmarshall_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id) or_return
 				} else {
 					_skip_any(ctx) or_return
 				}
@@ -457,7 +475,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 					// NOTE resets raw array size
 					raw_array.len = length
 					_reserve_memory_any_dynamic_array(raw_array, info.elem.id, length)
-					_unmarshall_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id)
+					_unmarshall_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id) or_return
 				} else {
 					_skip_any(ctx) or_return
 				}
@@ -568,7 +586,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 						if name == text {
 							data := rawptr(uintptr(v.data) + info.offsets[i])
 							id := info.types[i].id
-							unmarshall(ctx, any { data, id }, allocator)
+							unmarshall(ctx, any { data, id }, allocator) or_return
 
 							length_count += 1
 							continue length_loop
