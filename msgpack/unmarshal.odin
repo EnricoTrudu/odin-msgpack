@@ -8,6 +8,10 @@ import "core:slice"
 import "core:reflect"
 import "core:intrinsics"
 
+// TODO force array values to be the same types, count up different types?
+//		skip if two different types appear
+// TODO force map values to be the same types
+
 // TODO replace this with individual skips, will be faster
 // read format and advance without caring about return value
 _skip_any :: proc(using ctx: ^Read_Context) {
@@ -54,7 +58,7 @@ _skip_any :: proc(using ctx: ^Read_Context) {
 // match the read context format - otherwhise data read will be skipped
 // i.e. a struct member is `i8`, then its `read_*` call has to respect that
 
-_unmarshal_i8 :: proc(using ctx: ^Read_Context, v: any) {
+_unmarshall_i8 :: proc(using ctx: ^Read_Context, v: any) {
 	value := cast(^i8) v.data
 
 	#partial switch ctx.current_format {
@@ -67,7 +71,7 @@ _unmarshal_i8 :: proc(using ctx: ^Read_Context, v: any) {
 	}
 }
 
-_unmarshal_i16 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_i16 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Int16 {
 		_skip_any(ctx)
 		return
@@ -82,7 +86,7 @@ _unmarshal_i16 :: proc(using ctx: ^Read_Context, v, a: any) {
 	}
 }
 
-_unmarshal_i32 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_i32 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Int32 {
 		_skip_any(ctx)
 		return
@@ -97,7 +101,7 @@ _unmarshal_i32 :: proc(using ctx: ^Read_Context, v, a: any) {
 	}
 }
 
-_unmarshal_i64 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_i64 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Int64 {
 		_skip_any(ctx)
 		return
@@ -113,14 +117,14 @@ _unmarshal_i64 :: proc(using ctx: ^Read_Context, v, a: any) {
 	}
 }
 
-_unmarshal_u8 :: proc(using ctx: ^Read_Context, v: any) {
+_unmarshall_u8 :: proc(using ctx: ^Read_Context, v: any) {
 	#partial switch ctx.current_format {
 		case .Int8: (cast(^u8) v.data)^ = read_uint8(ctx)
 		case: _skip_any(ctx)
 	}
 }
 
-_unmarshal_u16 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_u16 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Uint16 {
 		_skip_any(ctx)
 		return
@@ -135,7 +139,7 @@ _unmarshal_u16 :: proc(using ctx: ^Read_Context, v, a: any) {
 	}
 }
 
-_unmarshal_u32 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_u32 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Uint32 {
 		_skip_any(ctx)
 		return
@@ -150,7 +154,7 @@ _unmarshal_u32 :: proc(using ctx: ^Read_Context, v, a: any) {
 	}
 }
 
-_unmarshal_u64 :: proc(using ctx: ^Read_Context, v, a: any) {
+_unmarshall_u64 :: proc(using ctx: ^Read_Context, v, a: any) {
 	if ctx.current_format != .Uint64 {
 		_skip_any(ctx)
 		return
@@ -200,16 +204,16 @@ current_is_string :: proc(ctx: ^Read_Context) -> bool {
 
 // iterate through array content uintptrs
 // similar to _write_array_any
-_unmarshal_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) {
+_unmarshall_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) {
 	for i in 0..<length {
 		data := root + uintptr(i * offset_size)
-		unmarshal(ctx, any { rawptr(data), id }, allocator)
+		unmarshall(ctx, any { rawptr(data), id }, allocator)
 	}
 }
 
-// unmarshal incoming any to exact type in ctx.current_format
+// unmarshall incoming any to exact type in ctx.current_format
 // when ti.id doesnt match ctx.current_format, it will be skipped
-unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocator) {
+unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocator) {
 	ti := runtime.type_info_base(type_info_of(v.id))
 	a := any { v.data, ti.id }
 
@@ -223,7 +227,7 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 	#partial switch info in ti.variant {
 		case runtime.Type_Info_Pointer: {
 			fmt.println("POINTER")
-			// unmarshal(ctx, a, allocator)
+			// unmarshall(ctx, a, allocator)
 		}
 
 		// input any is integer, match integer type to read format, parse value
@@ -231,19 +235,19 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			#partial switch ctx.current_format {
 				case .Positive_Fix_Int, .Negative_Fix_Int, .Int8, .Int16, .Int32, .Int64: {
 					switch i in a {
-						case i8: _unmarshal_i8(ctx, v)
-						case i16, i16le, i16be: _unmarshal_i16(ctx, v, a)
-						case i32, i32le, i32be: _unmarshal_i32(ctx, v, a)
-						case i64, i64le, i64be, int: _unmarshal_i64(ctx, v, a)
+						case i8: _unmarshall_i8(ctx, v)
+						case i16, i16le, i16be: _unmarshall_i16(ctx, v, a)
+						case i32, i32le, i32be: _unmarshall_i32(ctx, v, a)
+						case i64, i64le, i64be, int: _unmarshall_i64(ctx, v, a)
 					}
 				}
 
 				case .Uint8, .Uint16, .Uint32, .Uint64: {
 					switch i in a {
-						case u8: _unmarshal_u8(ctx, v)
-						case u16, u16le, u16be: _unmarshal_u16(ctx, v, a)
-						case u32, u32le, u32be: _unmarshal_u32(ctx, v, a)
-						case u64, u64le, u64be, uint: _unmarshal_u64(ctx, v, a)
+						case u8: _unmarshall_u8(ctx, v)
+						case u16, u16le, u16be: _unmarshall_u16(ctx, v, a)
+						case u32, u32le, u32be: _unmarshall_u32(ctx, v, a)
+						case u64, u64le, u64be, uint: _unmarshall_u64(ctx, v, a)
 					}
 				}
 
@@ -271,7 +275,7 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 
 		// different sized booleans NON spec compliant
 		// but write_bool converts odin bool types to 1 byte
-		// so read returns 1 byte and unmarshalling should be allowed
+		// so read returns 1 byte and unmarshallling should be allowed
 		case runtime.Type_Info_Boolean: {
 			if ctx.current_format == .True || ctx.current_format == .False {
 				value := read_bool(ctx)
@@ -328,7 +332,16 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			} else {
 				if current_is_array(ctx) {
 					length := read_array(ctx)
-					_unmarshal_array(ctx, length, uintptr(v.data), info.elem_size, info.elem.id)
+
+					// NOTE read has to match array count
+					if length == info.count {
+						_unmarshall_array(ctx, length, uintptr(v.data), info.elem_size, info.elem.id)
+					} else {
+						// else skip each any
+						for i in 0..<length {
+							_skip_any(ctx)
+						}
+					}
 				} else {
 					_skip_any(ctx)
 				}
@@ -358,39 +371,42 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			} else {
 				if current_is_array(ctx) {
 					length := read_array(ctx)
-					fmt.println(length)
+		
+					if length == 0 {
+						return
+					}
 
-					// TODO odin arrays only* allows same valued primtives keys
-					// TODO suport writes
+					if raw_slice != nil {
+						free(raw_slice.data, allocator)
+					}
 
-					// _unmarshal_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id)
+					// create new slice with element id, unmarshall content
+					make_slice_raw(raw_slice, info.elem.id, length, info.elem.align, allocator)
+					_unmarshall_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id)
 				} else {
 					_skip_any(ctx)
 				}
 			}	
 		}
 
+		// may resize underlying array to new size
+		// sets new size of array and unmarshalls inner values
 		case runtime.Type_Info_Dynamic_Array: {
 			raw_array := (^mem.Raw_Dynamic_Array)(a.data)
 
 			if info.elem.id == byte {
 				// validate current is binary
-				// if current_is_binary(ctx) {
-				// 	binary_bytes := read_bin(ctx)
+				if current_is_binary(ctx) {
+					binary_bytes := read_bin(ctx)
+					size := len(binary_bytes)
 
-				// 	// delete old slice content if existed, replace with copied bytes
-				// 	if raw_array != nil {
-				// 		// TODO pass loc?
-				// 		free(raw_array.data, allocator)
-				// 	} 
-
-				// 	// TODO bad
-				// 	cloned_result := slice.clone(binary_bytes)
-				// 	raw_array.data = &cloned_result[0]
-				// 	raw_array.len = len(binary_bytes)
-				// } else {
-				// 	_skip_any(ctx)
-				// }
+					// reserve till size, set size, mem copy region
+					_reserve_memory_any_dynamic_array(raw_array, byte, size)
+					raw_array.len = size
+					mem.copy(raw_array.data, &binary_bytes[0], size)
+				} else {
+					_skip_any(ctx)
+				}
 			} else {
 				if current_is_array(ctx) {
 					length := read_array(ctx)
@@ -400,7 +416,7 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 					// NOTE resets raw array size
 					raw_array.len = length
 					_reserve_memory_any_dynamic_array(raw_array, info.elem.id, length)
-					_unmarshal_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id)
+					_unmarshall_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id)
 				} else {
 					_skip_any(ctx)
 				}
@@ -464,8 +480,8 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			// 	key := rawptr(data + entry_type.offsets[2])
 			// 	value := rawptr(data + entry_type.offsets[3])
 			
-			// 	unmarshal(ctx, any { key, info.key.id }, allocator)
-			// 	unmarshal(ctx, any { value, info.value.id }, allocator)
+			// 	unmarshall(ctx, any { key, info.key.id }, allocator)
+			// 	unmarshall(ctx, any { value, info.value.id }, allocator)
 			// }
 
 
@@ -475,8 +491,8 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 			// 	key := rawptr(data + entry_type.offsets[2])
 			// 	value := rawptr(data + entry_type.offsets[3])
 
-			// 	unmarshal(ctx, any{ key, info.key.id }, allocator)
-			// 	unmarshal(ctx, any{ value, info.value.id }, allocator)
+			// 	unmarshall(ctx, any{ key, info.key.id }, allocator)
+			// 	unmarshall(ctx, any{ value, info.value.id }, allocator)
 			// }
 		}
 
@@ -514,7 +530,7 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 						if name == text {
 							data := rawptr(uintptr(v.data) + info.offsets[i])
 							id := info.types[i].id
-							unmarshal(ctx, any { data, id }, allocator)
+							unmarshall(ctx, any { data, id }, allocator)
 
 							length_count += 1
 							continue length_loop
@@ -537,15 +553,9 @@ unmarshal :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocat
 	}
 }
 
-// unmarshal_new :: proc(ctx: ^Read_Context, some_type: $T, allocator := context.allocator) -> ^T {
-// 	result := new(T, allocator)
-// 	unmarshal(ctx, result, allocator)
-// 	return result
-// }
-
-// unmarshal_new :: proc(ctx: ^Read_Context, $T: typeid, allocator := context.allocator) -> T {
+// unmarshall_new :: proc(ctx: ^Read_Context, $T: typeid, allocator := context.allocator) -> T {
 // 	result: T
-// 	unmarshal(ctx, result, allocator)
+// 	unmarshall(ctx, result, allocator)
 // 	return result
 // }
 
@@ -604,11 +614,24 @@ _reserve_memory_any_dynamic_array :: proc(array: ^mem.Raw_Dynamic_Array, type: t
 // 	}
 // }
 
-_reserve_memory_any_map :: proc(header, key, value: typeid, capacity: int, loc := #caller_location) {
-		
+make_slice_raw :: proc(
+	raw_slice: ^mem.Raw_Slice,
+
+	type: typeid,
+	#any_int len: int, 
+	alignment: int, 
+
+	allocator := context.allocator, 
+	loc := #caller_location,
+) {
+	runtime.make_slice_error_loc(loc, len)
+	type_size := reflect.size_of_typeid(type)
+
+	data, err := runtime.mem_alloc_bytes(type_size * len, alignment, allocator, loc)
+	if data == nil && type_size != 0 {
+		return
+	}
+
+	s := mem.Raw_Slice { raw_data(data), len }
+	raw_slice^ = s
 }
-
-// map_insert_any :: proc(raw_map: ^runtime.Raw_Map, key, value: any) {
-		
-// }
-
