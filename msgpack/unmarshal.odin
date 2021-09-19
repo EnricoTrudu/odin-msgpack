@@ -283,6 +283,55 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 	return 
 }
 
+// avoid duplicate code _Array and _Enumerated_Array
+_unmarshall_array_check :: proc(
+	ctx: ^Read_Context, 
+	length: int, 
+	element_type: typeid, 
+	element_size: int, 
+	v: any,
+) -> (err: Read_Error) {
+	// NOTE BINARY support: only allow exact array size match with binary
+	if element_type == byte {
+		// validate current is binary
+		if current_is_binary(ctx) {
+			binary_bytes := read_bin(ctx) or_return
+
+			if length == len(binary_bytes) {
+				mem.copy(v.data, &binary_bytes[0], length)
+			}
+		} else {
+			_skip_any(ctx) or_return
+		}
+	} else {
+		if current_is_array(ctx) {
+			length := read_array(ctx) or_return
+
+			// NOTE read has to match array count
+			if length == length {
+				// when values arent the same type, skip all content
+				if ctx.decoding == .Strict {
+					same := array_has_same_types(ctx, length) or_return
+					if !same {
+						return
+					}
+				}
+
+				_unmarshall_array(ctx, length, uintptr(v.data), element_size, element_type) or_return
+			} else {
+				// else skip each any
+				for i in 0..<length {
+					_skip_any(ctx) or_return
+				}
+			}
+		} else {
+			_skip_any(ctx) or_return
+		}
+	}
+
+	return .None
+}
+
 // unmarshall incoming any to exact type in ctx.current_format
 // when ti.id doesnt match ctx.current_format, it will be skipped
 unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocator) -> (err: Read_Error) {
@@ -400,43 +449,11 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 		}
 
 		case runtime.Type_Info_Array: {
-			// NOTE BINARY support: only allow exact array size match with binary
-			if info.elem.id == byte {
-				// validate current is binary
-				if current_is_binary(ctx) {
-					binary_bytes := read_bin(ctx) or_return
+			_unmarshall_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
+		}
 
-					if info.count == len(binary_bytes) {
-						mem.copy(v.data, &binary_bytes[0], info.count)
-					}
-				} else {
-					_skip_any(ctx) or_return
-				}
-			} else {
-				if current_is_array(ctx) {
-					length := read_array(ctx) or_return
-
-					// NOTE read has to match array count
-					if length == info.count {
-						// when values arent the same type, skip all content
-						if ctx.decoding == .Strict {
-							same := array_has_same_types(ctx, length) or_return
-							if !same {
-								return
-							}
-						}
-
-						_unmarshall_array(ctx, length, uintptr(v.data), info.elem_size, info.elem.id) or_return
-					} else {
-						// else skip each any
-						for i in 0..<length {
-							_skip_any(ctx) or_return
-						}
-					}
-				} else {
-					_skip_any(ctx) or_return
-				}
-			}
+		case runtime.Type_Info_Enumerated_Array: {
+			_unmarshall_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
 		}
 
 		case runtime.Type_Info_Slice: {

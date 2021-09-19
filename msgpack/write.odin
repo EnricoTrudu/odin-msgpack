@@ -447,6 +447,19 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 			}
 		}
 
+		// same as array
+		case runtime.Type_Info_Enumerated_Array: {
+			length := info.count 
+
+			if info.elem.id == byte {
+				_write_bin_format(ctx, length) or_return
+				return write_bytes(ctx, v.data, length)
+			} else {
+				_write_array_format(ctx, length) or_return
+				return _write_array_any(ctx, length, uintptr(v.data), info.elem_size, info.elem.id)
+			}
+		}
+
 		// write array format and fill data per inner any element
 		case runtime.Type_Info_Slice: {
 			slice := (^mem.Raw_Slice)(a.data)

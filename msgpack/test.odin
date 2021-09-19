@@ -162,6 +162,33 @@ test_array_any :: proc() {
 	test_read_write(write, read_same_size, mem.kilobytes(1))		
 }
 
+test_enum_array_any :: proc() {
+	Some_Enum :: enum {
+		A = 3,
+		B,
+		C,
+	}
+
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		test: [Some_Enum]int
+		test[.A] = 1
+		test[.B] = 10
+		test[.C] = 254
+		write_any(ctx, test) or_return
+		return .None
+	}
+	
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		test: [Some_Enum]int
+		fmt.println("before", test)
+		unmarshall(ctx, test) or_return
+		fmt.println("after", test)
+		return .None
+	}
+
+	test_read_write(write, read, mem.kilobytes(1))		
+}
+
 test_binary_array :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test: [10]u8

@@ -24,7 +24,7 @@ modify_last_time :: proc(name: string) -> bool {
 
 main :: proc() {
 	// ctx := msgpack.write_context_scoped(mem.kilobytes(1))
-	// result := test_write(&ctx)
+	// result := test_write(ctx)
 	// if result != .None {
 	// 	fmt.println("FAILED:", result)
 	// }
@@ -44,6 +44,12 @@ main :: proc() {
 
 	container.array_init_len_cap(&indents, 0, 32)
 	y_offset: i32 = 20
+
+	ctx := msgpack.read_context_init(data)
+	defer msgpack.read_context_destroy(&ctx)
+	msgpack.read_context_add_typeid(&ctx, int)
+	msgpack.read_context_add_typeid(&ctx, u8)
+	ctx.start = data
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
@@ -66,7 +72,8 @@ main :: proc() {
 			}
 		}
 
-		err := read_and_draw(data, 20, y_offset)
+		ctx.input = data
+		err := read_and_draw(&ctx, 20, y_offset)
 		if err != .None {
 			fmt.panicf("stahp %v", err)
 		}
@@ -125,14 +132,14 @@ indentation_push :: proc(length: int, step: int, is_array: bool) {
 	})
 }
 
-read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Error) {
+read_and_draw :: proc(ctx: ^msgpack.Read_Context, x_off, y_off: i32) -> (err: msgpack.Read_Error) {
 	x := x_off
 	y := y_off
 	measure_text: cstring
 	measured_text_size: i32
 	text_color := rl.BLACK
 	text_size: i32 = 20
-	ctx := msgpack.read_context_init(bytes)
+	
 	builder := strings.make_builder_len_cap(0, 64, context.temp_allocator)
 	current_step: int
 
@@ -140,7 +147,7 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 
 	// fmt.println("----")
 	for len(ctx.input) != 0 {
-		b := msgpack.read_byte(&ctx) or_return
+		b := msgpack.read_byte(ctx) or_return
 		
 		format := msgpack.format_clamp(b)
 		ctx.current_format = format
@@ -173,14 +180,14 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 
 		#partial switch format {
 			case .Fix_Array, .Array16, .Array32: {
-				length := msgpack.read_array(&ctx) or_return
+				length := msgpack.read_array(ctx) or_return
 				indentation_push(length, current_step, true)
 				rl.DrawText("[", x, y, text_size, rl.RED)
 				measure_text = "["
 			}
 
 			case .Fix_Map, .Map16, .Map32: {
-				length := msgpack.read_map(&ctx) or_return
+				length := msgpack.read_map(ctx) or_return
 				indentation_push(length * 2, current_step, false)
 				rl.DrawText("{", x, y, text_size, rl.GREEN)
 				measure_text = "{"
@@ -188,12 +195,12 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 
 			case .Nil: {
 				rl.DrawText("nil", x, y, text_size, text_color)
-				msgpack.read_advance(&ctx) or_return
+				msgpack.read_advance(ctx) or_return
 				measure_text = "nil"
 			}
 
 			case .Positive_Fix_Int, .Negative_Fix_Int, .Int8, .Int16, .Int32, .Int64: {
-				value := msgpack.read_int(&ctx) or_return
+				value := msgpack.read_int(ctx) or_return
 				fmt.sbprintf(&builder, "%d", value)
 				text := cheat_cstring(&builder)
 				rl.DrawText(text, x, y, text_size, text_color)
@@ -201,7 +208,7 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 			}
 
 			case .Uint8, .Uint16, .Uint32, .Uint64: {
-				value := msgpack.read_uint(&ctx) or_return
+				value := msgpack.read_uint(ctx) or_return
 				fmt.sbprintf(&builder, "%d", value)
 				text := cheat_cstring(&builder)
 				rl.DrawText(text, x, y, text_size, text_color)
@@ -209,14 +216,14 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 			}
 
 			case .True, .False: {
-				value := msgpack.read_bool(&ctx) or_return
+				value := msgpack.read_bool(ctx) or_return
 				text: cstring = value ? "true" : "false"
 				rl.DrawText(text, x, y, text_size, text_color)
 				measure_text = text
 			}
 
 			case .Fix_Str, .Str8, .Str16, .Str32: {
-				text := msgpack.read_string(&ctx) or_return
+				text := msgpack.read_string(ctx) or_return
 				strings.write_quoted_string(&builder, text)
 				
 				final_text := cheat_cstring(&builder)
@@ -226,10 +233,10 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 
 			case .Float32, .Float64: {
 				if format == .Float32 {
-					value := msgpack.read_float32(&ctx) or_return
+					value := msgpack.read_float32(ctx) or_return
 					fmt.sbprintf(&builder, "%f", value)
 				} else {
-					value := msgpack.read_float64(&ctx) or_return
+					value := msgpack.read_float64(ctx) or_return
 					fmt.sbprintf(&builder, "%f", value)
 				}
 
@@ -239,7 +246,7 @@ read_and_draw :: proc(bytes: []byte, x_off, y_off: i32) -> (err: msgpack.Read_Er
 			}
 
 			case .Bin8, .Bin16, .Bin32: {
-				data := msgpack.read_bin(&ctx) or_return
+				data := msgpack.read_bin(ctx) or_return
 				fmt.sbprintf(&builder, "%v", data)
 				
 				text := cheat_cstring(&builder)
