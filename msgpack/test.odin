@@ -283,6 +283,7 @@ test_map :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		if true {
 			test: map[i8]u8
+			defer delete(test)
 			test[0] = 255
 			test[1] = 254
 			write_any(ctx, test) or_return
@@ -301,6 +302,9 @@ test_map :: proc() {
 		// test: map[int]string
 		// test: map[string]int
 		test: map[i8]u8
+		defer delete(test)
+		
+		fmt.println("before", test, len(test), cap(test))
 		
 		read_format(ctx) or_return
 		length := read_map(ctx) or_return
@@ -323,17 +327,28 @@ test_map :: proc() {
 test_map_experimental :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test: map[i8]u8
+		defer delete(test)
 		test[0] = 255
-		test[1] = 254
+		test[5] = 10
 		write_any(ctx, test) or_return
+		fmt.println("HASH TEST", 5 in test)
 		return .None
 	}
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: map[i8]u8
+		defer delete(test)
 
+		fmt.println("before", test, len(test), cap(test))
 		unmarshall(ctx, test) or_return
-		// fmt.println("after", test, len(test), cap(test))
+		fmt.println("after", test, len(test), cap(test))
+
+		for key, value in test {
+			fmt.println("key", key, "value", value)
+		}
+
+		fmt.println("HASH TEST", 5 in test)
+
 		return .None
 	}
 

@@ -134,11 +134,7 @@ _unmarshall_i64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 }
 
 _unmarshall_u8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
-	#partial switch ctx.current_format {
-		case .Int8: (cast(^u8) v.data)^ = read_uint8(ctx) or_return
-		case: _skip_any(ctx) or_return
-	}
-
+	(cast(^u8) v.data)^ = read_uint8(ctx) or_return
 	return
 }
 
@@ -348,7 +344,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 
 	#partial switch info in ti.variant {
 		case runtime.Type_Info_Pointer: {
-			// return .Unsupported_Pointer
+			// return .Pointer_Unsupp
 		}
 
 		// input any is integer, match integer type to read format, parse value
@@ -552,7 +548,6 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			ed := runtime.type_info_base(gs.types[1]).variant.(runtime.Type_Info_Dynamic_Array)
 			entry_type := ed.elem.variant.(runtime.Type_Info_Struct)
 			entry_size := ed.elem_size
-			// entry_align := gs.align
 
 			fmt.println("INSIDE MAP", entry_type, entry_size, ed.elem)
 
@@ -560,12 +555,12 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 				// clear map
 			}
 
+			// build header with runtime info
 			header := runtime.Map_Header {m = m}
-			// header.equal = intrinsics.type_equal_proc(info.key.id)
+			header.equal = info.key_equal
 
 			header.entry_size    = entry_size
-			// header.entry_align   = entry_type.align
-			header.entry_align   = 0
+			header.entry_align   = info.generated_struct.align
 
 			header.key_offset    = entry_type.offsets[2]
 			key_size := info.key.size
@@ -576,29 +571,27 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			header.value_size    = value_size
 
 			runtime.__dynamic_map_reserve(header, length)
-			// runtime.__dynamic_map_grow(header)
 
-			// entry_header := runtime.Map_Entry_Header(header,)
+			for i in 0..<length {
+				runtime.__dynamic_array_append_nothing(&m.entries, header.entry_size, header.entry_align)
+			}
 
-			// for i in 0..<length {
-			// 	data := uintptr(entries.data) + uintptr(i * entry_size)
-			// 	key := rawptr(data + entry_type.offsets[2])
-			// 	value := rawptr(data + entry_type.offsets[3])
-			
-			// 	unmarshall(ctx, any { key, info.key.id }, allocator)
-			// 	unmarshall(ctx, any { value, info.value.id }, allocator)
-			// }
+			for i in 0..<length {
+				data := uintptr(entries.data) + uintptr(i * entry_size)
 
+				key := rawptr(data + entry_type.offsets[2])
+				value := rawptr(data + entry_type.offsets[3])
+		
+				key_any := any { key, info.key.id }
+				value_any := any { value, info.value.id }
+				unmarshall(ctx, key_any, allocator) or_return
+				unmarshall(ctx, value_any, allocator) or_return
 
-			// // write key value pair per entry
-			// for i in 0..<entries.len {
-			// 	data := uintptr(entries.data) + uintptr(i * entry_size)
-			// 	key := rawptr(data + entry_type.offsets[2])
-			// 	value := rawptr(data + entry_type.offsets[3])
+				// update entry hash				
+				(cast(^uintptr) (data + entry_type.offsets[0]))^ = info.key_hasher(key, 0)
+			}
 
-			// 	unmarshall(ctx, any{ key, info.key.id }, allocator)
-			// 	unmarshall(ctx, any{ value, info.value.id }, allocator)
-			// }
+			runtime.__dynamic_map_rehash(header, length)
 		}
 
 		// fixed extension type id

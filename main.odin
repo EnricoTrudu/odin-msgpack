@@ -33,10 +33,11 @@ main :: proc() {
 	// test_binary_slice_any()
 	// test_different_types_array()
 	// test_map()
-	// test_map_experimental()
+	test_map_experimental()
 	// test_write()
 	// test_temp()
 	// test_rune()
+	// test_write_struct
 }
 
 check_leaks :: proc(ta: ^mem.Tracking_Allocator) {
