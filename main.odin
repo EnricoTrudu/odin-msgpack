@@ -2,39 +2,55 @@ package main
 
 import "core:fmt"
 import "core:runtime"
+import "core:mem"
 import msgpack "msgpack"
 
-// or_return by default on all functions
+// new feature: or_return by default on all functions
 // #any_int documentation
+// RTTI union
+// RTTI bit_set
+// RTTI map
+// RTTI any -> any
 
 main :: proc() {
-	msgpack.test_enum_array_any()
+	using msgpack
+	
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator);
+	context.allocator = mem.tracking_allocator(&track);
+	defer check_leaks(&track);
+	defer mem.tracking_allocator_destroy(&track);
 
-	// msgpack.test_typeid()
-	// msgpack.test_typeid_any()
-	// msgpack.test_dynamic_array()
-	// msgpack.test_array_any()
-	// msgpack.test_binary_array()
-	// msgpack.test_slice_any()
-	// msgpack.test_binary_dynamic_array()
-	// msgpack.test_binary_slice_any()
-	// msgpack.test_different_types_array()
-	// msgpack.test_map()
-	// msgpack.test_map_experimental()
-	// msgpack.test_write()
-	// msgpack.test_temp()
-	// msgpack.test_rune()
+	// test_temp()
+	// test_enum_array_any()
+	// test_typeid()
+	// test_typeid_any()
+	// test_dynamic_array()
+	// test_array_any()
+	// test_binary_array()
+	// test_slice_any()
+	// test_binary_dynamic_array()
+	// test_binary_slice_any()
+	// test_different_types_array()
+	// test_map()
+	// test_map_experimental()
+	// test_write()
+	// test_temp()
+	// test_rune()
+}
 
-	// { // Quaternion operations
-	// 	q := 1 + 2i + 3j + 4k
-	// 	r := quaternion(5, 6, 7, 8)
-	// 	t := q * r
-	// 	fmt.printf("(%v) * (%v) = %v\n", q, r, t)
-	// 	v := q / r
-	// 	fmt.printf("(%v) / (%v) = %v\n", q, r, v)
-	// 	u := q + r
-	// 	fmt.printf("(%v) + (%v) = %v\n", q, r, u)
-	// 	s := q - r
-	// 	fmt.printf("(%v) - (%v) = %v\n", q, r, s)
-	// }
+check_leaks :: proc(ta: ^mem.Tracking_Allocator) {
+	if len(ta.allocation_map) > 0 {
+		fmt.println("leaks:", len(ta.allocation_map));
+		for _, v in ta.allocation_map {
+			fmt.printf("%5d %v\n", v.size, v.location);
+		}
+	}
+	
+	if len(ta.bad_free_array) > 0 {
+		fmt.println("bad frees:", len(ta.bad_free_array));
+		for v in ta.bad_free_array {
+			fmt.printf("%p %v\n", v.memory, v.location);
+		}
+	}
 }

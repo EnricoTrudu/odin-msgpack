@@ -286,7 +286,7 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 // avoid duplicate code _Array and _Enumerated_Array
 _unmarshall_array_check :: proc(
 	ctx: ^Read_Context, 
-	length: int, 
+	array_length: int, 
 	element_type: typeid, 
 	element_size: int, 
 	v: any,
@@ -297,8 +297,8 @@ _unmarshall_array_check :: proc(
 		if current_is_binary(ctx) {
 			binary_bytes := read_bin(ctx) or_return
 
-			if length == len(binary_bytes) {
-				mem.copy(v.data, &binary_bytes[0], length)
+			if array_length == len(binary_bytes) {
+				mem.copy(v.data, &binary_bytes[0], array_length)
 			}
 		} else {
 			_skip_any(ctx) or_return
@@ -308,7 +308,7 @@ _unmarshall_array_check :: proc(
 			length := read_array(ctx) or_return
 
 			// NOTE read has to match array count
-			if length == length {
+			if array_length == length {
 				// when values arent the same type, skip all content
 				if ctx.decoding == .Strict {
 					same := array_has_same_types(ctx, length) or_return
@@ -320,7 +320,7 @@ _unmarshall_array_check :: proc(
 				_unmarshall_array(ctx, length, uintptr(v.data), element_size, element_type) or_return
 			} else {
 				// else skip each any
-				for i in 0..<length {
+				for i in 0..<array_length {
 					_skip_any(ctx) or_return
 				}
 			}
@@ -348,7 +348,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 
 	#partial switch info in ti.variant {
 		case runtime.Type_Info_Pointer: {
-			return .Unmarshall_Pointer
+			// return .Unsupported_Pointer
 		}
 
 		// input any is integer, match integer type to read format, parse value

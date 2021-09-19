@@ -24,6 +24,7 @@ Write_Error :: enum {
 
 	Type_Id_Unsupported,
 
+	Pointer_Unsupported,
 	Any_Type_Unsupported,
 	Any_Type_Not_Array,
 	Any_Type_Not_Matched,
@@ -33,10 +34,10 @@ write_context_result :: proc(using ctx: ^Write_Context) -> []byte {
 	return start[:len(start) - len(output)]
 }
 
-@(deferred_in=write_context_init)
-write_context_scoped :: proc(cap: int) -> Write_Context {
-	return write_context_init(cap)
-}
+// @(deferred_in=write_context_init)
+// write_context_scoped :: proc(cap: int) -> Write_Context {
+// 	return write_context_init(cap)
+// }
 
 write_context_init :: proc(cap: int) -> (result: Write_Context) {
 	result.start = make([]byte, cap)
@@ -44,9 +45,9 @@ write_context_init :: proc(cap: int) -> (result: Write_Context) {
 	return
 }
 
-write_context_destroy :: proc(ctx: ^Write_Context) {
-	delete(ctx.start)
-	delete(ctx.typeid_map)
+write_context_destroy :: proc(using ctx: ^Write_Context) {
+	delete(start)
+	delete(typeid_map)
 }
 
 write_context_add_typeid :: proc(using ctx: ^Write_Context, type: typeid) {
@@ -371,6 +372,10 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 	a := any { v.data, ti.id }
 
 	#partial switch info in ti.variant {
+		case runtime.Type_Info_Pointer: {
+			return .Pointer_Unsupported
+		}
+
 		case runtime.Type_Info_Integer: {
 			switch i in a {
 				case i8: return write_int8(ctx, i)

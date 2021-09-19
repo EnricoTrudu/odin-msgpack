@@ -12,8 +12,9 @@ test_read_write :: proc(
 	read: proc(ctx: ^Read_Context) -> Read_Error,
 	capacity: int,
 ) {
-	write_ctx := write_context_scoped(capacity)
+	write_ctx := write_context_init(capacity)
 	defer write_context_destroy(&write_ctx)
+	
 	err := write(&write_ctx)
 	if err != .None {
 		fmt.panicf("WRITE FAILED: %v", err)
@@ -92,6 +93,7 @@ test_typeid_any :: proc() {
 test_dynamic_array :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test: [dynamic]int
+		defer delete(test)
 		append(&test, 1)
 		append(&test, 4)
 		write_any(ctx, test) or_return
@@ -101,6 +103,7 @@ test_dynamic_array :: proc() {
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [dynamic]int
+		defer delete(test)
 		fmt.println("before", test)
 		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
@@ -113,6 +116,7 @@ test_dynamic_array :: proc() {
 test_binary_dynamic_array :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test: [dynamic]u8
+		defer delete(test)
 		append(&test, 255)
 		append(&test, 10)
 		append(&test, 1)
@@ -123,6 +127,7 @@ test_binary_dynamic_array :: proc() {
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [dynamic]u8
+		defer delete(test)
 		fmt.println("before", test)
 		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
@@ -212,6 +217,7 @@ test_binary_array :: proc() {
 test_slice_any :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test := make([]int, 2)
+		defer delete(test)
 		test[0] = 255
 		test[1] = 10
 		write_any(ctx, test) or_return
@@ -220,6 +226,7 @@ test_slice_any :: proc() {
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: []int
+		defer delete(test)
 		fmt.println("before", test)
 		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
@@ -232,6 +239,7 @@ test_slice_any :: proc() {
 test_binary_slice_any :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
 		test := make([]u8, 3)
+		defer delete(test)
 		test[0] = 255
 		test[1] = 10
 		test[2] = 1
@@ -241,6 +249,7 @@ test_binary_slice_any :: proc() {
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: []u8
+		defer delete(test)
 		fmt.println("before", test)
 		unmarshall(ctx, test) or_return
 		fmt.println("after", test)
@@ -332,7 +341,8 @@ test_map_experimental :: proc() {
 }
 
 test_write :: proc() -> Write_Error {
-	ctx := write_context_scoped(mem.kilobytes(1))
+	ctx := write_context_init(mem.kilobytes(1))
+	defer write_context_destroy(&ctx)
 
 	// test_write_basics(&ctx) or_return
 	// test_write_bytes(&ctx) or_return
@@ -393,6 +403,7 @@ test_write_arrays :: proc(ctx: ^Write_Context) -> Write_Error {
 	write_any(ctx, b[:]) or_return
 
 	c: [dynamic]string
+	defer delete(c)
 	append(&c, "yo")
 	append(&c, "damn")
 	write_any(ctx, c) or_return
@@ -472,17 +483,35 @@ test_rune :: proc() {
 	test_read_write(write, read, mem.kilobytes(1))
 }
 
-test_quaternion :: proc() {
+// test_quaternion :: proc() {
+// 	write :: proc(ctx: ^Write_Context) -> Write_Error {
+// 		write_any(ctx, rune('a'))
+// 		return .None
+// 	}
+
+// 	read :: proc(ctx: ^Read_Context) -> Read_Error {
+// 		test: rune = 'b'
+// 		fmt.println("before", test)
+// 		unmarshall(ctx, test) or_return
+// 		fmt.println("after", test)
+// 		return .None
+// 	}
+
+// 	test_read_write(write, read, mem.kilobytes(1))
+// }
+
+test_temp :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
-		write_any(ctx, rune('a'))
+		// write_any(ctx, test)
 		return .None
 	}
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
-		test: rune = 'b'
-		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
-		fmt.println("after", test)
+		// test: Some_Struct
+		// test.d = new_clone(4)
+		// fmt.println("before", test)
+		// unmarshall(ctx, test) or_return
+		// fmt.println("after", test, test.b^, test.d^, test.e^)
 		return .None
 	}
 
