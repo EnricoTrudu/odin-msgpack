@@ -3,6 +3,7 @@ package msgpack
 import "core:fmt"
 import "core:strings"
 import "core:runtime"
+import "core:unicode/utf8"
 
 Read_Context :: struct {
 	start: []byte,
@@ -21,6 +22,7 @@ Read_Error :: enum {
 	None,
 
 	Bounds_Buffer_Byte,
+	Bounds_Buffer_Byte_Ptr,
 	Bounds_Buffer_Advance,
 	Bounds_Buffer_Slice,
 
@@ -77,6 +79,7 @@ format_clamp :: proc(supposed_format: byte) -> Format {
 	return Format(supposed_format)
 }
 
+// return byte at input index, error when out of bounds
 read_byte :: proc(using ctx: ^Read_Context, index := 0) -> (res: byte, err: Read_Error) {
 	if len(input) > index {
 		return input[index], .None
@@ -85,6 +88,7 @@ read_byte :: proc(using ctx: ^Read_Context, index := 0) -> (res: byte, err: Read
 	return 0, .Bounds_Buffer_Byte
 }
 
+// advance input slice by input size, error when out of bounds
 read_advance :: proc(using ctx: ^Read_Context, size := 1) -> (err: Read_Error) {
 	if len(input) >= size {
 		input = input[size:]
@@ -94,8 +98,9 @@ read_advance :: proc(using ctx: ^Read_Context, size := 1) -> (err: Read_Error) {
 	return .Bounds_Buffer_Advance
 }
 
+// return slice from input slice `from` and `to`, error when out of bounds
 read_slice :: proc(using ctx: ^Read_Context, from, to: int) -> (res: []byte, err: Read_Error) {
-	if from >= 0 && to > from && len(input) > to {
+	if from >= 0 && to > from && len(input) >= to {
 		res = input[from:to]
 		return
 	}
@@ -103,13 +108,20 @@ read_slice :: proc(using ctx: ^Read_Context, from, to: int) -> (res: []byte, err
 	return nil, .Bounds_Buffer_Slice
 }
 
+// read current byte, set and clamp current format
+read_format :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
+	b := read_byte(ctx) or_return
+	ctx.current_format = format_clamp(b)
+	return
+}
+
 // return bound checked byte ptr, additional size check for how far you're going to cast 
 read_byte_ptr :: proc(using ctx: ^Read_Context, index := 1, size := 1) -> (res: ^byte, err: Read_Error) {
-	if len(input) > index && len(input) > index + size {
+	if len(input) > index && len(input) >= index + size {
 		return &input[index], .None
 	}
 
-	return nil, .Bounds_Buffer_Byte
+	return nil, .Bounds_Buffer_Byte_Ptr
 }
 
 read_bool	:: proc(using ctx: ^Read_Context) -> (res: bool, err: Read_Error) {
@@ -251,7 +263,6 @@ read_float32 :: proc(using ctx: ^Read_Context) -> (res: f32, err: Read_Error) {
 	ptr := read_byte_ptr(ctx, 1, 4) or_return
 	res = (cast(^f32) ptr)^
 	read_advance(ctx, 5) or_return
-	input = input[5:]
 	return
 }
 
@@ -275,9 +286,22 @@ read_fix_str :: proc(using ctx: ^Read_Context) -> (res: string, err: Read_Error)
 	return	
 }
 
+// same as read_fix_str, return rune instead
+read_rune :: proc(using ctx: ^Read_Context) -> (res: rune, err: Read_Error) {
+	b := read_byte(ctx) or_return
+	b &= ~(byte(Format.Fix_Str))
+	length := int(b)
+	
+	bytes := read_slice(ctx, 1, 1 + length) or_return
+	res, _ = utf8.decode_rune(bytes[:])
+	read_advance(ctx, 1 + length) or_return
+	
+	return	
+}
+
 // NOTE temp string, memory belongs to bytes
 read_str8 :: proc(using ctx: ^Read_Context) -> (res: string, err: Read_Error) {
-	b := read_byte(ctx) or_return
+	b := read_byte(ctx, 1) or_return
 	length := int(b)
 
 	ptr := read_byte_ptr(ctx, 2, length) or_return
@@ -353,43 +377,6 @@ read_bin :: proc(using ctx: ^Read_Context) -> (res: []byte, err: Read_Error) {
 	return
 }
 
-// NOTE temp byte slice 
-read_fix_ext :: proc(using ctx: ^Read_Context) -> (type: i8, data: []byte) {
-	type = (cast(^i8) &input[1])^
-	size := _fix_ext_size(current_format)
-	data = input[2:2 + size]
-	input = input[2 + size:]
-	return
-}
-
-// NOTE temp byte slice
-read_ext :: proc(using ctx: ^Read_Context) -> (type: i8, data: []byte) {
-	length: int
-	#partial switch current_format {
-		case .Ext8: {
-			length = int((cast(^u8) &input[1])^)
-			input = input[2:]
-		}
-		
-		case .Ext16: {
-			length = int((cast(^u16be) &input[1])^)
-			input = input[3:]
-		}
-		
-		case .Ext32: {
-			length = int((cast(^u32be) &input[1])^)
-			input = input[5:]
-		}
-
-		case: panic("WRONG FORMAT")
-	}
-
-	type = (cast(^i8) &input[0])^
-	data = input[1:1 + length]
-	input = input[1 + length:]
-	return
-}
-
 // array length per format type
 read_array :: proc(using ctx: ^Read_Context) -> (length: int, err: Read_Error) {
 	#partial switch current_format {
@@ -427,7 +414,7 @@ read_map :: proc(using ctx: ^Read_Context) -> (length: int, err: Read_Error) {
 			b := read_byte(ctx) or_return
 			b &= ~(byte(Format.Fix_Map))
 			length = int(b)
-			read_advance(ctx)
+			read_advance(ctx) or_return
 			return
 		}
 
@@ -439,7 +426,7 @@ read_map :: proc(using ctx: ^Read_Context) -> (length: int, err: Read_Error) {
 		}
 
 		case .Map32: {
-			ptr := read_byte_ptr(ctx, 1, 2) or_return
+			ptr := read_byte_ptr(ctx, 1, 4) or_return
 			length = int((cast(^u32be) ptr)^)
 			read_advance(ctx, 5) or_return
 			return
@@ -449,10 +436,60 @@ read_map :: proc(using ctx: ^Read_Context) -> (length: int, err: Read_Error) {
 	return 0, .Wrong_Map_Format
 }
 
-read_typeid :: proc(using ctx: ^Read_Context) -> (res: typeid, err: Read_Error) {
-	assert(len(typeids) != 0)
-	value := read_uint8(ctx) or_return
+// NOTE temp byte slice 
+read_fix_ext :: proc(using ctx: ^Read_Context) -> (type: i8, data: []byte, err: Read_Error) {
+	b := read_byte(ctx, 1) or_return
+	type = i8(b)
+
+	// NOTE has to be valid current format
+	size := _fix_ext_size(current_format)
+	data = read_slice(ctx, 2, 2 + size) or_return
+	read_advance(ctx, 2 + size) or_return
+	return
+}
+
+// NOTE temp byte slice
+read_ext :: proc(using ctx: ^Read_Context) -> (type: i8, data: []byte, err: Read_Error) {
+	length: int
 	
+	#partial switch current_format {
+		case .Ext8: {
+			ptr := read_byte_ptr(ctx, 1, 1) or_return
+			length = int((cast(^u8) ptr)^)
+			read_advance(ctx, 2) or_return
+			input = input[2:]
+		}
+		
+		case .Ext16: {
+			ptr := read_byte_ptr(ctx, 1, 2) or_return
+			length = int((cast(^u16be) ptr)^)
+			read_advance(ctx, 3) or_return
+		}
+		
+		case .Ext32: {
+			ptr := read_byte_ptr(ctx, 1, 4) or_return
+			length = int((cast(^u32be) ptr)^)
+			read_advance(ctx, 5) or_return
+		}
+
+		case: panic("WRONG FORMAT")
+	}
+
+	b := read_byte(ctx) or_return
+	type = i8(b)
+	data = read_slice(ctx, 1, 1 + length) or_return
+	read_advance(ctx, 1 + length) or_return
+	return
+}
+
+// custom odin extensions
+
+// NOTE does not advance read
+// output from read_fix_ext
+read_typeid :: proc(using ctx: ^Read_Context, type: i8, bytes: []byte) -> (res: typeid, err: Read_Error) {
+	assert(len(typeids) != 0 && type == i8(Extension.Type_Id))
+	value := (cast(^u8) &bytes[0])^
+
 	if int(value) < len(typeids) {
 		res = typeids[value]
 		return

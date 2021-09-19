@@ -141,7 +141,7 @@ write_uint :: proc {
 // write .Int8 next + value content
 write_int8 :: proc(using ctx: ^Write_Context, value: i8) -> Write_Error {
 	write_format(ctx, .Int8) or_return
-	value := value;
+	value := value
 	return write_bytes(ctx, &value, 1)
 }
 
@@ -203,6 +203,17 @@ write_fix_str :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 
 	data := mem.raw_string_data(text)
 	return write_bytes(ctx, data, clamped_length)
+}
+
+// helper for odin runes
+write_rune :: proc(using ctx: ^Write_Context, r: rune) -> Write_Error {
+	bytes, length := utf8.encode_rune(r)
+
+	value := u8(length)
+	value |= byte(Format.Fix_Str)
+	write_byte(ctx, value) or_return
+
+	return write_bytes(ctx, &bytes[0], length)
 }
 
 // write .Str8 + string length as u8 + string content clamped 
@@ -400,11 +411,16 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 		case runtime.Type_Info_String: {
 			switch s in a {
 				case string: {
-					fmt.println("string", v, a, info, s)
 					return write_string(ctx, s)
 				}
 				case cstring: return write_string(ctx, string(s))
 			}
+		}
+
+		case runtime.Type_Info_Rune: {
+			some_rune := a.(rune)
+			write_rune(ctx, some_rune) or_return
+			return .None
 		}
 
 		case runtime.Type_Info_Boolean: {
@@ -473,8 +489,8 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 			ed := runtime.type_info_base(gs.types[1]).variant.(runtime.Type_Info_Dynamic_Array)
 			entry_type := ed.elem.variant.(runtime.Type_Info_Struct)
 			entry_size := ed.elem_size
-			fmt.println("entries", entries, ed.elem.id, ed.elem_size)
-			fmt.println(info.key.id, info.value.id)
+			// fmt.println("entries", entries, ed.elem.id, ed.elem_size)
+			// fmt.println(info.key.id, info.value.id)
 
 			// write entry info formats
 			_write_map_format(ctx, entries.len) or_return
@@ -530,7 +546,7 @@ write_any :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 
 		case runtime.Type_Info_Type_Id: {
 			type := a.(typeid)
-			write_typeid(ctx, type)
+			write_typeid(ctx, type) or_return
 			return .None
 		}
 
@@ -550,7 +566,8 @@ write_fix_ext :: proc(ctx: ^Write_Context, format: Format, type: i8, value: any)
 	write_format(ctx, format) or_return
 	type := type
 	write_bytes(ctx, &type, 1) or_return
-	return write_bytes(ctx, value.data, _fix_ext_size(format))
+	size := _fix_ext_size(format)
+	return write_bytes(ctx, value.data, size)
 }
 
 // write .Ext8 - .Ext32 format + length info + ext type + value content
@@ -580,18 +597,20 @@ write_ext :: proc(ctx: ^Write_Context, type: i8, value: any, length: u32) -> Wri
 }
 
 write_timestamp32 :: proc(ctx: ^Write_Context, time: u32) -> Write_Error {
-	return write_fix_ext(ctx, .Fix_Ext4, -1, time)
+	return write_fix_ext(ctx, .Fix_Ext4, i8(Extension.Timestamp), time)
 }
 
 write_timestamp64 :: proc(ctx: ^Write_Context, time: i64) -> Write_Error {
-	return write_fix_ext(ctx, .Fix_Ext8, -1, time)
+	return write_fix_ext(ctx, .Fix_Ext8, i8(Extension.Timestamp), time)
 }
 
 write_timestamp96 :: proc(ctx: ^Write_Context, nanoseconds: u32, seconds: u64) -> Write_Error {
 	bytes: [12]byte
-	write_ext_format(ctx, -1, len(bytes))
+	write_ext_format(ctx, i8(Extension.Timestamp), len(bytes))
 	return write_bytes(ctx, &bytes[0], len(bytes))
 }
+
+// custom odin extensions
 
 write_typeid :: proc(using ctx: ^Write_Context, type: typeid) -> Write_Error {
 	assert(len(typeid_map) != 0)
@@ -601,5 +620,5 @@ write_typeid :: proc(using ctx: ^Write_Context, type: typeid) -> Write_Error {
 	}
 
 	id := typeid_map[type]
-	return write_uint8(ctx, id)
+	return write_fix_ext(ctx, Format.Fix_Ext1, i8(Extension.Type_Id), id)
 }

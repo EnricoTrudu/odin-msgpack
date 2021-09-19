@@ -39,8 +39,6 @@ _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
 			read_bin(ctx) or_return
 		}
 
-		// TODO extensions
-
 		case .Fix_Array, .Array16, .Array32: {
 			length := read_array(ctx) or_return
 			for i in 0..<length {
@@ -51,6 +49,14 @@ _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
 		case .Fix_Map, .Map16, .Map32: {
 			// TODO loop through array skips
 			read_map(ctx) or_return
+		}
+
+		case .Fix_Ext1, .Fix_Ext2, .Fix_Ext4, .Fix_Ext8, .Fix_Ext16: {
+			read_fix_ext(ctx) or_return
+		}
+
+		case .Ext8, .Ext16, .Ext32: {
+			read_ext(ctx) or_return
 		}
 	}
 
@@ -220,6 +226,22 @@ current_is_string :: proc(ctx: ^Read_Context) -> bool {
 	return false	
 }
 
+current_is_fix_ext :: proc(ctx: ^Read_Context) -> bool {
+	#partial switch ctx.current_format {
+		case .Fix_Ext1, .Fix_Ext2, .Fix_Ext4, .Fix_Ext8, .Fix_Ext16: return true
+	}
+
+	return false	
+}
+
+current_is_ext :: proc(ctx: ^Read_Context) -> bool {
+	#partial switch ctx.current_format {
+		case .Ext8, .Ext16, .Ext32: return true
+	}
+
+	return false	
+}
+
 // iterate through array content uintptrs
 // similar to _write_array_any
 _unmarshall_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) -> Read_Error {
@@ -364,6 +386,16 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 				}
 			} else {
 				_skip_any(ctx) or_return
+			}
+		}
+
+		case runtime.Type_Info_Rune: {
+			if current_is_string(ctx) {
+				r := cast(^rune) v.data
+				result := read_rune(ctx) or_return
+				r^ = result
+			} else {
+				_skip_any(ctx) or_return				
 			}
 		}
 
@@ -552,11 +584,19 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			// }
 		}
 
+		// fixed extension type id
 		case runtime.Type_Info_Type_Id: {
-			assert(len(ctx.typeids) != 0)
-			ptr := cast(^typeid) a.data
-			type := read_typeid(ctx) or_return
-			ptr^ = type
+			if current_is_fix_ext(ctx) {
+				type, bytes := read_fix_ext(ctx) or_return
+
+				if type == i8(Extension.Type_Id) {
+					ptr := cast(^typeid) a.data
+					type := read_typeid(ctx, type, bytes) or_return
+					ptr^ = type
+				}
+			} else {
+				_skip_any(ctx) or_return
+			}
 		}
 
 		case runtime.Type_Info_Struct: {

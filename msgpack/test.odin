@@ -46,7 +46,9 @@ test_typeid :: proc() {
 
 		test: typeid
 		fmt.println("before", test)
-		test = read_typeid(ctx) or_return
+		read_format(ctx) or_return
+		type, bytes := read_fix_ext(ctx) or_return
+		test = read_typeid(ctx, type, bytes) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -241,38 +243,221 @@ test_different_types_array :: proc() {
 	test_read_write(write, read, mem.kilobytes(1))
 }
 
-// test_map :: proc() {
-// 	write :: proc() -> (bytes: []byte, err: msgpack.Write_Error) {
-// 		ctx := msgpack.write_context_scoped(mem.megabytes(1))
+test_map :: proc() {
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		if true {
+			test: map[i8]u8
+			test[0] = 255
+			test[1] = 254
+			write_any(ctx, test) or_return
+		} else {
+			_write_map_format(ctx, 2) or_return
+			write_int8(ctx, 0) or_return 
+			write_uint8(ctx, 255) or_return
+			write_int8(ctx, 1) or_return 
+			write_uint8(ctx, 254) or_return
+		}
 
-// 		// test: map[string]int
-// 		// test["asd"] = 1
-// 		// test["xyz"] = 2
-// 		// test: map[int]string
-// 		// test[0] = "hello"
-// 		// test[1] = "damn"
-// 		test: map[int]u8
-// 		test[0] = 255
-// 		test[1] = 254
-// 		msgpack.write_any(&ctx, test) or_return
+		return .None
+	}
 
-// 		return msgpack.write_context_result(&ctx), .None
-// 	}
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		// test: map[int]string
+		// test: map[string]int
+		test: map[i8]u8
+		
+		read_format(ctx) or_return
+		length := read_map(ctx) or_return
 
-// 	bytes, err := write()
-// 	if err != .None {
-// 		fmt.panicf("WRITE FAILED: %v", err)
-// 	}
+		for i in 0..<length {
+			read_format(ctx)
+			key := read_int8(ctx) or_return
+			read_format(ctx)
+			value := read_uint8(ctx) or_return
+			test[key] = value
+		}
+		
+		fmt.println("after", test, len(test), cap(test))
+		return .None
+	}
 
-// 	os.write_entire_file("test.bin", bytes)
+	test_read_write(write, read, mem.kilobytes(1))
+}
 
-// 	{
-// 		read_ctx := msgpack.read_context_init(bytes)
-// 		// test: map[int]string
-// 		// test: map[string]int
-// 		test: map[int]u8
-// 		fmt.println("before", test)
-// 		msgpack.unmarshall(&read_ctx, test) or_return
-// 		fmt.println("after", test, len(test), cap(test))
-// 	}
-// }
+test_map_experimental :: proc() {
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		test: map[i8]u8
+		test[0] = 255
+		test[1] = 254
+		write_any(ctx, test) or_return
+		return .None
+	}
+
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		test: map[i8]u8
+
+		unmarshall(ctx, test) or_return
+		// fmt.println("after", test, len(test), cap(test))
+		return .None
+	}
+
+	test_read_write(write, read, mem.kilobytes(1))
+}
+
+test_write :: proc() -> Write_Error {
+	ctx := write_context_scoped(mem.kilobytes(1))
+
+	// test_write_basics(&ctx) or_return
+	// test_write_bytes(&ctx) or_return
+	test_write_arrays(&ctx) or_return
+	// test_write_map(&ctx) or_return
+	// test_write_ext(&ctx) or_return
+	// test_write_struct(&ctx) or_return
+
+	os.write_entire_file("test.bin", write_context_result(&ctx))
+
+	return .None
+}
+
+test_write_basics :: proc(ctx: ^Write_Context) -> Write_Error {
+	write_bool(ctx, false) or_return
+	write_nil(ctx) or_return
+	write_positive_fix_int(ctx, 127) or_return
+	write_negative_fix_int(ctx, 4) or_return
+
+	write_uint8(ctx, 10) or_return
+	write_uint16(ctx, 42_312) or_return
+	write_uint32(ctx, 223_123_102) or_return
+	write_uint64(ctx, 223_123_102) or_return
+
+	write_int8(ctx, 10) or_return
+	write_int16(ctx, 22_312) or_return
+	write_int32(ctx, 200_123_102) or_return
+	write_int64(ctx, 223_123_102) or_return
+
+	write_float32(ctx, 120.23) or_return
+	write_float64(ctx, 323_231_230.23) or_return
+
+	return .None
+}
+
+test_write_bytes :: proc(ctx: ^Write_Context) -> Write_Error {	
+	write_fix_str(ctx, "yo guyssddddddddddddddddaaaaaaaaaaaaaaddddddd") or_return
+	write_fix_str(ctx, "yo guys") or_return
+	write_str8(ctx, "yoooooo") or_return
+	write_str16(ctx, "you get it") or_return
+	write_str32(ctx, "sup guys") or_return
+
+	write_bin(ctx, { 1, 132, 123, 123 }) or_return
+	
+	garbage := make([]byte, 256)
+	garbage[len(garbage) - 1] = 1
+	defer delete(garbage)
+	write_bin(ctx, garbage[:]) or_return
+
+	return .None	
+}
+
+test_write_arrays :: proc(ctx: ^Write_Context) -> Write_Error {
+	a := [?]i32 { 10, 30 }
+	write_any(ctx, a) or_return
+
+	b := [?]f32 { 0.4, 0.1, -0.2 }
+	write_any(ctx, b[:]) or_return
+
+	c: [dynamic]string
+	append(&c, "yo")
+	append(&c, "damn")
+	write_any(ctx, c) or_return
+
+	d := [?][2]f32 { {1, 0}, {0, 1}, {0, 3} }
+	write_any(ctx, d) or_return
+
+	// arrays / slices / dynamic arrays of u8 should not create array formats
+	// rather .Bin* formats
+	data := [?]u8 { 1, 132, 123, 123 }
+	write_any(ctx, data) or_return
+	write_bin(ctx, data[:]) or_return
+
+	return .None
+}
+
+test_write_map :: proc(ctx: ^Write_Context) -> Write_Error {
+	a: map[string]int
+	defer delete(a)
+	a["first"] = 1
+	a["second"] = 2
+	write_any(ctx, a) or_return
+
+	b: map[int][4]u8
+	defer delete(b)
+	b[1] = { 1, 2, 3, 4 }
+	b[2] = { 4, 3, 2, 1 }
+	write_any(ctx, b) or_return
+
+	return .None
+}
+
+test_write_ext :: proc(ctx: ^Write_Context) -> Write_Error {
+	write_timestamp64(ctx, 120) or_return
+	return .None
+}
+
+test_write_struct :: proc(ctx: ^Write_Context) -> Write_Error {
+	TestInner :: struct {
+		c: u8,
+		d: u32,
+	}
+
+	Testing :: struct {
+		a: int,
+		b: string,
+		inner: TestInner,
+	}
+
+	test := Testing { 
+		a = 10, 
+		b = "yo guys",
+		inner = {
+			c = 244,
+			d = 100_000,
+		},
+	}
+	write_any(ctx, test) or_return
+
+	return .None
+}
+
+test_rune :: proc() {
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		write_any(ctx, rune('a'))
+		return .None
+	}
+
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		test: rune = 'b'
+		fmt.println("before", test)
+		unmarshall(ctx, test) or_return
+		fmt.println("after", test)
+		return .None
+	}
+
+	test_read_write(write, read, mem.kilobytes(1))
+}
+
+test_quaternion :: proc() {
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		write_any(ctx, rune('a'))
+		return .None
+	}
+
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		test: rune = 'b'
+		fmt.println("before", test)
+		unmarshall(ctx, test) or_return
+		fmt.println("after", test)
+		return .None
+	}
+
+	test_read_write(write, read, mem.kilobytes(1))
+}
