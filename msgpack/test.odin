@@ -26,7 +26,7 @@ test_read_write :: proc(
 
 	read_ctx := read_context_init(bytes)
 	read_ctx.decoding = .Strict
-	defer read_context_destroy(&read_ctx)
+	defer read_context_destroy(read_ctx)
 	read_err := read(&read_ctx)
 	if read_err != .None {
 		fmt.panicf("READ FAILED: %v", read_err)
@@ -324,30 +324,56 @@ test_map :: proc() {
 	test_read_write(write, read, mem.kilobytes(1))
 }
 
-test_map_experimental :: proc() {
+test_map_any :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
-		test: map[i8]u8
+		test: map[string]u32
 		defer delete(test)
-		test[0] = 255
-		test[5] = 10
+		test["test"] = 255
+		test["asd"] = 10
 		write_any(ctx, test) or_return
-		fmt.println("HASH TEST", 5 in test)
+		fmt.println("HASH TEST", "test" in test)
 		return .None
 	}
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
-		test: map[i8]u8
+		test: map[string]u32
 		defer delete(test)
 
 		fmt.println("before", test, len(test), cap(test))
-		unmarshall(ctx, test) or_return
+		unmarshall(ctx, test, context.temp_allocator) or_return
 		fmt.println("after", test, len(test), cap(test))
+		fmt.println("HASH TEST", "asd" in test)
 
-		for key, value in test {
-			fmt.println("key", key, "value", value)
-		}
+		return .None
+	}
 
-		fmt.println("HASH TEST", 5 in test)
+	test_read_write(write, read, mem.kilobytes(1))
+}
+
+test_map_struct_any :: proc() {
+	Some_Struct :: struct {
+		a: int,
+		b: uint,
+	}
+
+	write :: proc(ctx: ^Write_Context) -> Write_Error {
+		test: map[Some_Struct]string
+		defer delete(test)
+		test[{ a = 10, b = 20 }] = "first"
+		test[{ a = 20, b = 30 }] = "second"
+		write_any(ctx, test) or_return
+		fmt.println("HASH TEST", { a = 10, b = 20 } in test)
+		return .None
+	}
+
+	read :: proc(ctx: ^Read_Context) -> Read_Error {
+		test: map[Some_Struct]string
+		defer delete(test)
+
+		fmt.println("before", test, len(test), cap(test))
+		unmarshall(ctx, test, context.temp_allocator) or_return
+		fmt.println("after", test, len(test), cap(test))
+		fmt.println("HASH TEST", Some_Struct { a = 20, b = 30 } in test)
 
 		return .None
 	}

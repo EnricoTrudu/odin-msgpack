@@ -43,12 +43,23 @@ read_context_init :: proc(input: []byte) -> Read_Context {
 	}
 }
 
-read_context_destroy :: proc(using ctx: ^Read_Context) {
+@(deferred_out=read_context_destroy)
+read_context_scoped :: proc(input: []byte) -> Read_Context {
+	return read_context_init(input) 
+}
+
+read_context_destroy :: proc(using ctx: Read_Context) {
 	delete(typeids)
 }
 
 read_context_add_typeid :: proc(using ctx: ^Read_Context, type: typeid) {
 	append(&typeids, type)
+}
+
+read_context_add_typeids :: proc(using ctx: ^Read_Context, types: []typeid) {
+	for type in types {
+		append(&typeids, type)
+	}
 }
 
 // clamps input to Format ranges
@@ -370,6 +381,10 @@ read_bin :: proc(using ctx: ^Read_Context) -> (res: []byte, err: Read_Error) {
 			length = int((cast(^u32be) ptr)^)
 			read_advance(ctx, 5) or_return
 		}
+	}
+
+	if length == 0 {
+		return nil, .None
 	}
 
 	res = read_slice(ctx, 0, length) or_return

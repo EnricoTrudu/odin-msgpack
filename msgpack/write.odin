@@ -54,6 +54,14 @@ write_context_add_typeid :: proc(using ctx: ^Write_Context, type: typeid) {
 	typeid_map[type] = u8(len(typeid_map))
 }
 
+write_context_add_typeids :: proc(using ctx: ^Write_Context, types: []typeid) {
+	assert(len(typeid_map) < 256)
+	
+	for type in types {
+		typeid_map[type] = u8(len(typeid_map))
+	}
+}
+
 // write a single byte into output
 write_byte :: proc(using ctx: ^Write_Context, value: u8) -> Write_Error {
 	if 1 > len(output) {

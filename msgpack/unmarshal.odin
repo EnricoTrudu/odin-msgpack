@@ -265,7 +265,7 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 		_skip_any(ctx) or_return
 		
 		if i != 0 && previous_format != ctx.current_format {
-			fmt.println("prev", previous_format, ctx.current_format)
+			// fmt.println("prev", previous_format, ctx.current_format)
 			ok = false
 		}
 	}
@@ -409,7 +409,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			}
 		}
 
-		// NOTE allocates memor
+		// NOTE allocates memory
 		case runtime.Type_Info_String: {
 			if current_is_string(ctx) {
 				text := read_string(ctx) or_return
@@ -418,15 +418,15 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 					case string: {
 						old_string := (cast(^string) v.data)
 						// NOTE maybe bad
-						delete(old_string^)
-						old_string^ = strings.clone(text)
+						delete(old_string^, allocator)
+						old_string^ = strings.clone(text, allocator)
 					}
 
 					case cstring: {
 						old_string := (cast(^cstring) v.data)
 						// NOTE maybe bad
-						delete(old_string^)
-						old_string^ = strings.clone_to_cstring(text)
+						delete(old_string^, allocator)
+						old_string^ = strings.clone_to_cstring(text, allocator)
 					}
 				}
 			} else {
@@ -460,6 +460,10 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 				if current_is_binary(ctx) {
 					binary_bytes := read_bin(ctx) or_return
 
+					if binary_bytes == nil {
+						return
+					}
+
 					// delete old slice content if existed, replace with copied bytes
 					if raw_slice != nil {
 						// TODO pass loc?
@@ -475,7 +479,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			} else {
 				if current_is_array(ctx) {
 					length := read_array(ctx) or_return
-		
+
 					if length == 0 {
 						return
 					}
@@ -571,10 +575,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			header.value_size    = value_size
 
 			runtime.__dynamic_map_reserve(header, length)
-
-			for i in 0..<length {
-				runtime.__dynamic_array_append_nothing(&m.entries, header.entry_size, header.entry_align)
-			}
+			m.entries.len = length
 
 			for i in 0..<length {
 				data := uintptr(entries.data) + uintptr(i * entry_size)
