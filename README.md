@@ -15,7 +15,7 @@ import msgpack "shared:odin-msgpack"
 // or_return checks the call for a possible error, leaves early on error
 // reader would have to read these in the same order
 write :: proc(ctx: ^msgpack.Write_Context) -> (err: msgpack.Write_Error) {
-	msgpack.write_i8(ctx, 10) or_return
+	msgpack.write_int8(ctx, 10) or_return
 	msgpack.write_nil(ctx) or_return
 	msgpack.write_string(ctx, "test") or_return
 	return
