@@ -676,8 +676,6 @@ write_timestamp96 :: proc(ctx: ^Write_Context, nanoseconds: u32, seconds: u64) -
 
 // write an odin typeid to fixed extension, has to be read back properly on the reader
 write_typeid :: proc(using ctx: ^Write_Context, type: typeid) -> Write_Error {
-	assert(len(typeid_map) != 0)
-
 	if type not_in typeid_map {
 		return .Type_Id_Unsupported
 	}
