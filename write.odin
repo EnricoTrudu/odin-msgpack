@@ -41,7 +41,7 @@ write_context_result :: proc(using ctx: Write_Context) -> []byte {
 }
 
 // scoped helper
-@(deferred_in=write_context_init)
+@(deferred_out=write_context_destroy)
 write_context_scoped :: proc(cap: int) -> Write_Context {
 	return write_context_init(cap)
 }
