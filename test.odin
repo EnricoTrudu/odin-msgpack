@@ -5,7 +5,7 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 
-// NOTE these are tests special read / writes and the automated write_any / unmarshall  or_return
+// NOTE these are tests special read / writes and the automated marshal / unmarshal  or_return
 
 // helper to write / read back results
 test_read_write :: proc(
@@ -73,7 +73,7 @@ test_typeid_any :: proc() {
 			b = u8,
 		}
 
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		return .None
 	}
 
@@ -83,7 +83,7 @@ test_typeid_any :: proc() {
 
 		test: Test
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -97,7 +97,7 @@ test_dynamic_array :: proc() {
 		defer delete(test)
 		append(&test, 1)
 		append(&test, 4)
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 
 		return .None
 	}
@@ -106,7 +106,7 @@ test_dynamic_array :: proc() {
 		test: [dynamic]int
 		defer delete(test)
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -121,7 +121,7 @@ test_binary_dynamic_array :: proc() {
 		append(&test, 255)
 		append(&test, 10)
 		append(&test, 1)
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 
 		return .None
 	}
@@ -130,7 +130,7 @@ test_binary_dynamic_array :: proc() {
 		test: [dynamic]u8
 		defer delete(test)
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -143,7 +143,7 @@ test_array_any :: proc() {
 		test: [10]int
 		test[0] = 255
 		test[1] = 10
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 
 		return .None
 	}
@@ -151,7 +151,7 @@ test_array_any :: proc() {
 	read_bad_size :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [8]int
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -159,7 +159,7 @@ test_array_any :: proc() {
 	read_same_size :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [10]int
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -180,14 +180,14 @@ test_enum_array_any :: proc() {
 		test[.A] = 1
 		test[.B] = 10
 		test[.C] = 254
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		return .None
 	}
 	
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [Some_Enum]int
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -200,14 +200,14 @@ test_binary_array :: proc() {
 		test: [10]u8
 		test[0] = 255
 		test[1] = 10
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		return .None
 	}
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [10]u8
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -221,7 +221,7 @@ test_slice_any :: proc() {
 		defer delete(test)
 		test[0] = 255
 		test[1] = 10
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		return .None
 	}
 
@@ -229,7 +229,7 @@ test_slice_any :: proc() {
 		test: []int
 		defer delete(test)
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -244,7 +244,7 @@ test_binary_slice_any :: proc() {
 		test[0] = 255
 		test[1] = 10
 		test[2] = 1
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		return .None
 	}
 
@@ -252,7 +252,7 @@ test_binary_slice_any :: proc() {
 		test: []u8
 		defer delete(test)
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -272,7 +272,7 @@ test_different_types_array :: proc() {
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [3]i8
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -287,7 +287,7 @@ test_map :: proc() {
 			defer delete(test)
 			test[0] = 255
 			test[1] = 254
-			write_any(ctx, test) or_return
+			marshal_ctx(ctx, test) or_return
 		} else {
 			_write_map_format(ctx, 2) or_return
 			write_int8(ctx, 0) or_return 
@@ -331,7 +331,7 @@ test_map_any :: proc() {
 		defer delete(test)
 		test["test"] = 255
 		test["asd"] = 10
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		fmt.println("HASH TEST", "test" in test)
 		return .None
 	}
@@ -341,7 +341,7 @@ test_map_any :: proc() {
 		defer delete(test)
 
 		fmt.println("before", test, len(test), cap(test))
-		unmarshall(ctx, test, context.temp_allocator) or_return
+		unmarshal_ctx(ctx, test, context.temp_allocator) or_return
 		fmt.println("after", test, len(test), cap(test))
 		fmt.println("HASH TEST", "asd" in test)
 
@@ -362,7 +362,7 @@ test_map_struct_any :: proc() {
 		defer delete(test)
 		test[{ a = 10, b = 20 }] = "first"
 		test[{ a = 20, b = 30 }] = "second"
-		write_any(ctx, test) or_return
+		marshal_ctx(ctx, test) or_return
 		fmt.println("HASH TEST", { a = 10, b = 20 } in test)
 		return .None
 	}
@@ -372,7 +372,7 @@ test_map_struct_any :: proc() {
 		defer delete(test)
 
 		fmt.println("before", test, len(test), cap(test))
-		unmarshall(ctx, test, context.temp_allocator) or_return
+		unmarshal_ctx(ctx, test, context.temp_allocator) or_return
 		fmt.println("after", test, len(test), cap(test))
 		fmt.println("HASH TEST", Some_Struct { a = 20, b = 30 } in test)
 
@@ -439,24 +439,24 @@ test_write_bytes :: proc(ctx: ^Write_Context) -> Write_Error {
 
 test_write_arrays :: proc(ctx: ^Write_Context) -> Write_Error {
 	a := [?]i32 { 10, 30 }
-	write_any(ctx, a) or_return
+	marshal_ctx(ctx, a) or_return
 
 	b := [?]f32 { 0.4, 0.1, -0.2 }
-	write_any(ctx, b[:]) or_return
+	marshal_ctx(ctx, b[:]) or_return
 
 	c: [dynamic]string
 	defer delete(c)
 	append(&c, "yo")
 	append(&c, "damn")
-	write_any(ctx, c) or_return
+	marshal_ctx(ctx, c) or_return
 
 	d := [?][2]f32 { {1, 0}, {0, 1}, {0, 3} }
-	write_any(ctx, d) or_return
+	marshal_ctx(ctx, d) or_return
 
 	// arrays / slices / dynamic arrays of u8 should not create array formats
 	// rather .Bin* formats
 	data := [?]u8 { 1, 132, 123, 123 }
-	write_any(ctx, data) or_return
+	marshal_ctx(ctx, data) or_return
 	write_bin(ctx, data[:]) or_return
 
 	return .None
@@ -467,13 +467,13 @@ test_write_map :: proc(ctx: ^Write_Context) -> Write_Error {
 	defer delete(a)
 	a["first"] = 1
 	a["second"] = 2
-	write_any(ctx, a) or_return
+	marshal_ctx(ctx, a) or_return
 
 	b: map[int][4]u8
 	defer delete(b)
 	b[1] = { 1, 2, 3, 4 }
 	b[2] = { 4, 3, 2, 1 }
-	write_any(ctx, b) or_return
+	marshal_ctx(ctx, b) or_return
 
 	return .None
 }
@@ -503,21 +503,21 @@ test_write_struct :: proc(ctx: ^Write_Context) -> Write_Error {
 			d = 100_000,
 		},
 	}
-	write_any(ctx, test) or_return
+	marshal_ctx(ctx, test) or_return
 
 	return .None
 }
 
 test_rune :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
-		write_any(ctx, rune('a'))
+		marshal_ctx(ctx, rune('a'))
 		return .None
 	}
 
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: rune = 'b'
 		fmt.println("before", test)
-		unmarshall(ctx, test) or_return
+		unmarshal_ctx(ctx, test) or_return
 		fmt.println("after", test)
 		return .None
 	}
@@ -527,14 +527,14 @@ test_rune :: proc() {
 
 // test_quaternion :: proc() {
 // 	write :: proc(ctx: ^Write_Context) -> Write_Error {
-// 		write_any(ctx, rune('a'))
+// 		marshal_ctx(ctx, rune('a'))
 // 		return .None
 // 	}
 
 // 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 // 		test: rune = 'b'
 // 		fmt.println("before", test)
-// 		unmarshall(ctx, test) or_return
+// 		unmarshal_ctx(ctx, test) or_return
 // 		fmt.println("after", test)
 // 		return .None
 // 	}
@@ -544,7 +544,7 @@ test_rune :: proc() {
 
 test_temp :: proc() {
 	write :: proc(ctx: ^Write_Context) -> Write_Error {
-		// write_any(ctx, test)
+		// marshal_ctx(ctx, test)
 		return .None
 	}
 
@@ -552,7 +552,7 @@ test_temp :: proc() {
 		// test: Some_Struct
 		// test.d = new_clone(4)
 		// fmt.println("before", test)
-		// unmarshall(ctx, test) or_return
+		// unmarshal_ctx(ctx, test) or_return
 		// fmt.println("after", test, test.b^, test.d^, test.e^)
 		return .None
 	}

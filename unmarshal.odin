@@ -68,7 +68,7 @@ _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
 // match the read context format - otherwhise data read will be skipped
 // i.e. a struct member is `i8`, then its `read_*` call has to respect that
 
-_unmarshall_i8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
+_unmarshal_i8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
 	value := cast(^i8) v.data
 
 	#partial switch ctx.current_format {
@@ -81,7 +81,7 @@ _unmarshall_i8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
 	return
 }
 
-_unmarshall_i16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_i16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Int16 {
 		_skip_any(ctx) or_return
 		return 
@@ -98,7 +98,7 @@ _unmarshall_i16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 	return
 }
 
-_unmarshall_i32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_i32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Int32 {
 		_skip_any(ctx) or_return
 		return
@@ -115,7 +115,7 @@ _unmarshall_i32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 	return
 }
 
-_unmarshall_i64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_i64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Int64 {
 		_skip_any(ctx) or_return
 		return
@@ -133,12 +133,12 @@ _unmarshall_i64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 	return
 }
 
-_unmarshall_u8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
+_unmarshal_u8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
 	(cast(^u8) v.data)^ = read_uint8(ctx) or_return
 	return
 }
 
-_unmarshall_u16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_u16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Uint16 {
 		_skip_any(ctx) or_return
 		return
@@ -155,7 +155,7 @@ _unmarshall_u16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 	return
 }
 
-_unmarshall_u32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_u32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Uint32 {
 		_skip_any(ctx) or_return
 		return
@@ -172,7 +172,7 @@ _unmarshall_u32 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error
 	return
 }
 
-_unmarshall_u64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
+_unmarshal_u64 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Uint64 {
 		_skip_any(ctx) or_return
 		return
@@ -240,10 +240,10 @@ current_is_ext :: proc(ctx: ^Read_Context) -> bool {
 
 // iterate through array content uintptrs
 // similar to _write_array_any
-_unmarshall_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) -> Read_Error {
+_unmarshal_array :: proc(ctx: ^Read_Context, length: int, root: uintptr, offset_size: int, id: typeid, allocator := context.allocator) -> Read_Error {
 	for i in 0..<length {
 		data := root + uintptr(i * offset_size)
-		unmarshall(ctx, any { rawptr(data), id }, allocator) or_return
+		unmarshal_ctx(ctx, any { rawptr(data), id }, allocator) or_return
 	}
 
 	return .None
@@ -280,7 +280,7 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 }
 
 // avoid duplicate code _Array and _Enumerated_Array
-_unmarshall_array_check :: proc(
+_unmarshal_array_check :: proc(
 	ctx: ^Read_Context, 
 	array_length: int, 
 	element_type: typeid, 
@@ -313,7 +313,7 @@ _unmarshall_array_check :: proc(
 					}
 				}
 
-				_unmarshall_array(ctx, length, uintptr(v.data), element_size, element_type) or_return
+				_unmarshal_array(ctx, length, uintptr(v.data), element_size, element_type) or_return
 			} else {
 				// else skip each any
 				for i in 0..<array_length {
@@ -328,9 +328,15 @@ _unmarshall_array_check :: proc(
 	return .None
 }
 
-// unmarshall incoming any to exact type in ctx.current_format
+unmarshal :: proc(v: any, bytes: []byte, allocator := context.allocator) -> (err: Read_Error) {
+	ctx := read_context_scoped(bytes)
+	unmarshal_ctx(&ctx, v, allocator) or_return
+	return 
+}
+
+// unmarshal incoming any to exact type in ctx.current_format
 // when ti.id doesnt match ctx.current_format, it will be skipped
-unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocator) -> (err: Read_Error) {
+unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.allocator) -> (err: Read_Error) {
 	ti := runtime.type_info_base(type_info_of(v.id))
 	a := any { v.data, ti.id }
 
@@ -365,19 +371,19 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 			#partial switch ctx.current_format {
 				case .Positive_Fix_Int, .Negative_Fix_Int, .Int8, .Int16, .Int32, .Int64: {
 					switch i in a {
-						case i8: _unmarshall_i8(ctx, v) or_return
-						case i16, i16le, i16be: _unmarshall_i16(ctx, v, a) or_return
-						case i32, i32le, i32be: _unmarshall_i32(ctx, v, a) or_return
-						case i64, i64le, i64be, int: _unmarshall_i64(ctx, v, a) or_return
+						case i8: _unmarshal_i8(ctx, v) or_return
+						case i16, i16le, i16be: _unmarshal_i16(ctx, v, a) or_return
+						case i32, i32le, i32be: _unmarshal_i32(ctx, v, a) or_return
+						case i64, i64le, i64be, int: _unmarshal_i64(ctx, v, a) or_return
 					}
 				}
 
 				case .Uint8, .Uint16, .Uint32, .Uint64: {
 					switch i in a {
-						case u8: _unmarshall_u8(ctx, v) or_return
-						case u16, u16le, u16be: _unmarshall_u16(ctx, v, a) or_return
-						case u32, u32le, u32be: _unmarshall_u32(ctx, v, a) or_return
-						case u64, u64le, u64be, uint: _unmarshall_u64(ctx, v, a) or_return
+						case u8: _unmarshal_u8(ctx, v) or_return
+						case u16, u16le, u16be: _unmarshal_u16(ctx, v, a) or_return
+						case u32, u32le, u32be: _unmarshal_u32(ctx, v, a) or_return
+						case u64, u64le, u64be, uint: _unmarshal_u64(ctx, v, a) or_return
 					}
 				}
 
@@ -405,7 +411,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 
 		// different sized booleans NON spec compliant
 		// but write_bool converts odin bool types to 1 byte
-		// so read returns 1 byte and unmarshallling should be allowed
+		// so read returns 1 byte and unmarshalling should be allowed
 		case runtime.Type_Info_Boolean: {
 			if ctx.current_format == .True || ctx.current_format == .False {
 				value := read_bool(ctx) or_return
@@ -458,11 +464,11 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 		}
 
 		case runtime.Type_Info_Array: {
-			_unmarshall_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
+			_unmarshal_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
 		}
 
 		case runtime.Type_Info_Enumerated_Array: {
-			_unmarshall_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
+			_unmarshal_array_check(ctx, info.count, info.elem.id, info.elem_size, v) or_return
 		}
 
 		case runtime.Type_Info_Slice: {
@@ -501,9 +507,9 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 						free(raw_slice.data, allocator)
 					}
 
-					// create new slice with element id, unmarshall content
+					// create new slice with element id, unmarshal content
 					make_slice_raw(raw_slice, info.elem.id, length, info.elem.align, allocator)
-					_unmarshall_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id) or_return
+					_unmarshal_array(ctx, length, uintptr(raw_slice.data), info.elem_size, info.elem.id) or_return
 				} else {
 					_skip_any(ctx) or_return
 				}
@@ -511,7 +517,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 		}
 
 		// may resize underlying array to new size
-		// sets new size of array and unmarshalls inner values
+		// sets new size of array and unmarshals inner values
 		case runtime.Type_Info_Dynamic_Array: {
 			raw_array := (^mem.Raw_Dynamic_Array)(a.data)
 
@@ -537,7 +543,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 					// NOTE resets raw array size
 					raw_array.len = length
 					_reserve_memory_any_dynamic_array(raw_array, info.elem.id, length)
-					_unmarshall_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id) or_return
+					_unmarshal_array(ctx, length, uintptr(raw_array.data), info.elem_size, info.elem.id) or_return
 				} else {
 					_skip_any(ctx) or_return
 				}
@@ -598,8 +604,8 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 		
 				key_any := any { key, info.key.id }
 				value_any := any { value, info.value.id }
-				unmarshall(ctx, key_any, allocator) or_return
-				unmarshall(ctx, value_any, allocator) or_return
+				unmarshal_ctx(ctx, key_any, allocator) or_return
+				unmarshal_ctx(ctx, value_any, allocator) or_return
 
 				// update entry hash				
 				(cast(^uintptr) (data + entry_type.offsets[0]))^ = info.key_hasher(key, 0)
@@ -650,7 +656,7 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 						if name == text {
 							data := rawptr(uintptr(v.data) + info.offsets[i])
 							id := info.types[i].id
-							unmarshall(ctx, any { data, id }, allocator) or_return
+							unmarshal_ctx(ctx, any { data, id }, allocator) or_return
 
 							length_count += 1
 							continue length_loop
@@ -675,9 +681,9 @@ unmarshall :: proc(using ctx: ^Read_Context, v: any, allocator := context.alloca
 	return
 }
 
-// unmarshall_new :: proc(ctx: ^Read_Context, $T: typeid, allocator := context.allocator) -> T {
+// unmarshal_new :: proc(ctx: ^Read_Context, $T: typeid, allocator := context.allocator) -> T {
 // 	result: T
-// 	unmarshall(ctx, result, allocator)
+// 	unmarshal(ctx, result, allocator)
 // 	return result
 // }
 
