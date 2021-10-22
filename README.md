@@ -1,9 +1,9 @@
 # odin-msgpack
 Implementation of [msgpack](https://msgpack.org/) in [odin](https://odin-lang.org/)
-Suport for `Writer` & `Reader` & `Un/Marshall` & `Extensions` 
+Suport for `Writer` & `Reader` & `Un/Marshal` & `Extensions` 
 
 # Tests
-Basic test code can be found in `test.odin`, prints out `write` / `read` results mostly useful to check `un/marshall` support
+Basic test code can be found in `test.odin`, prints out `write` / `read` results mostly useful to check `un/marshal` support
 
 # Basic Example 
 ```go
@@ -53,7 +53,7 @@ main :: proc() {
 	
 	// write write_data automatically into msgpack data
 	write_data := Struct_A { a = 1, b = true }
-	write_err := msgpack.write_any(&write_ctx, write_data)
+	write_err := msgpack.marshal(&write_ctx, write_data)
 	assert(write_err == .None)
 
 	// read init with written msgpack result
@@ -62,7 +62,7 @@ main :: proc() {
 
 	// read data automatically back into read_data
 	read_data: Struct_A
-	read_err := msgpack.unmarshall(&read_ctx, read_data)
+	read_err := msgpack.unmarshal(&read_ctx, read_data)
 	assert(read_err == .None)
 
 	// both are equal
@@ -75,5 +75,5 @@ msgpack is ***dynamic***, meaning you could have `array`s with different types o
 odin does not support this, so whenever you expect dynamic results in arrays / maps you have to explicitly us the `reader` / `writer`
 
 # Exception
-`write_any` & `unmarshall` do read  / write dynamic msgpack data, i.e. a struct will be written to msgpack as a `string` + any odin data type
+`marshal` & `unmarshal` do read  / write dynamic msgpack data, i.e. a struct will be written to msgpack as a `string` + any odin data type
 If you encounter issues with these, please write issues / pull requests
