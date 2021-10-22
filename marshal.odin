@@ -3,6 +3,7 @@ package msgpack
 import "core:fmt"
 import "core:mem"
 import "core:runtime"
+import "core:slice"
 
 // write array info based on any recursive
 _marshal_array_any :: proc(ctx: ^Write_Context, length: int, root: uintptr, offset_size: int, id: typeid) -> Write_Error {
@@ -18,10 +19,11 @@ _marshal_array_any :: proc(ctx: ^Write_Context, length: int, root: uintptr, offs
 	return .None
 }
 
+// returns cloned slice of the written result, err that should be checked
 marshal :: proc(v: any, cap: int) -> (data: []byte, err: Write_Error) {
 	ctx := write_context_scoped(cap)
 	marshal_ctx(&ctx, v) or_return
-	data = write_context_result(ctx)
+	data = slice.clone(write_context_result(ctx))
 	return
 }
 
