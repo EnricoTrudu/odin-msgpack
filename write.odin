@@ -1,10 +1,7 @@
 package msgpack
 
-import "core:fmt"
 import "core:mem"
 import "core:unicode/utf8"
-import "core:runtime"
-import "core:reflect"
 
 // custom proc which is triggered by a typeid you want to encode in your own way
 // i.e. write a fixed_ext automatically to reduce size

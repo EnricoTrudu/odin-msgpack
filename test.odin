@@ -310,7 +310,7 @@ test_map :: proc() {
 		read_format(ctx) or_return
 		length := read_map(ctx) or_return
 
-		for i in 0..<length {
+		for _ in 0..<length {
 			read_format(ctx)
 			key := read_int8(ctx) or_return
 			read_format(ctx)

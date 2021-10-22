@@ -1,8 +1,6 @@
 package msgpack
 
-import "core:fmt"
 import "core:strings"
-import "core:runtime"
 import "core:unicode/utf8"
 
 // custom extension read proc used in unmarshall

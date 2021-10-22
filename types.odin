@@ -1,9 +1,6 @@
 package msgpack
 
 import "core:fmt"
-import "core:os"
-import "core:mem"
-import "core:strings"
 
 // see https://github.com/msgpack/msgpack/blob/master/spec.md
 

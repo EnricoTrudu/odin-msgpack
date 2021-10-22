@@ -735,7 +735,7 @@ make_slice_raw :: proc(
 	type_size := reflect.size_of_typeid(type)
 
 	data, err := runtime.mem_alloc_bytes(type_size * len, alignment, allocator, loc)
-	if data == nil && type_size != 0 {
+	if (data == nil && type_size != 0) || err != .None {
 		return
 	}
 
