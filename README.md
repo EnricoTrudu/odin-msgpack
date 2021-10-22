@@ -47,22 +47,15 @@ main :: proc() {
 		b: bool,
 	}
 
-	// write init
-	write_ctx := msgpack.write_context_init(1024)
-	defer msgpack.write_context_destroy(write_ctx)	
-	
 	// write write_data automatically into msgpack data
 	write_data := Struct_A { a = 1, b = true }
-	write_err := msgpack.marshal(&write_ctx, write_data)
+	bytes, write_err := msgpack.marshal(write_data, 1024)
+	defer delete(bytes)
 	assert(write_err == .None)
-
-	// read init with written msgpack result
-	read_ctx := msgpack.read_context_init(msgpack.write_context_result(write_ctx))
-	defer msgpack.read_context_destroy(read_ctx)
 
 	// read data automatically back into read_data
 	read_data: Struct_A
-	read_err := msgpack.unmarshal(&read_ctx, read_data)
+	read_err := msgpack.unmarshal(read_data, bytes)
 	assert(read_err == .None)
 
 	// both are equal
