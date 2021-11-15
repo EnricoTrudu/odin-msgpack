@@ -15,32 +15,31 @@ import "core:intrinsics"
 // TODO replace this with individual skips, will be faster
 // read format and advance without caring about return value
 _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
-	b := read_byte(ctx) or_return
-	ctx.current_format = format_clamp(b)
+  format := read_format(ctx) or_return
 
-	#partial switch ctx.current_format {
+	#partial switch format {
 		case .Nil, .False, .True, .Positive_Fix_Int, .Negative_Fix_Int: {
 			read_advance(ctx) or_return
 		}
 
 		case .Int8, .Int16, .Int32, .Int64: {
-			read_int(ctx)	or_return
+			read_int(ctx, format)	or_return
 		}
 
 		case .Uint8, .Uint16, .Uint32, .Uint64: {
-			read_uint(ctx) or_return
+			read_uint(ctx, format) or_return
 		}
 
 		case .Fix_Str, .Str8, .Str16, .Str32: {
-			read_string(ctx) or_return
+			read_string(ctx, format) or_return
 		}
 
 		case .Bin8, .Bin16, .Bin32: {
-			read_bin(ctx) or_return
+			read_bin(ctx, format) or_return
 		}
 
 		case .Fix_Array, .Array16, .Array32: {
-			length := read_array(ctx) or_return
+			length := read_array(ctx, format) or_return
 			for i in 0..<length {
 				_skip_any(ctx) or_return
 			}
@@ -48,22 +47,22 @@ _skip_any :: proc(using ctx: ^Read_Context) -> (err: Read_Error) {
 
 		case .Fix_Map, .Map16, .Map32: {
 			// TODO loop through array skips
-			read_map(ctx) or_return
+			read_map(ctx, format) or_return
 		}
 
 		case .Fix_Ext1, .Fix_Ext2, .Fix_Ext4, .Fix_Ext8, .Fix_Ext16: {
-			read_fix_ext(ctx) or_return
+			read_fix_ext(ctx, ctx.current_format) or_return
 		}
 
 		case .Ext8, .Ext16, .Ext32: {
-			read_ext(ctx) or_return
+			read_ext(ctx, format) or_return
 		}
 	}
 
 	return
 }
 
-// NOTE easy copy / paste helper code following 
+// NOTE easy copy / paste helper code following
 // most of these helpers are conversion to their respective types while trying to
 // match the read context format - otherwhise data read will be skipped
 // i.e. a struct member is `i8`, then its `read_*` call has to respect that
@@ -84,7 +83,7 @@ _unmarshal_i8 :: proc(using ctx: ^Read_Context, v: any) -> (err: Read_Error) {
 _unmarshal_i16 :: proc(using ctx: ^Read_Context, v, a: any) -> (err: Read_Error) {
 	if ctx.current_format != .Int16 {
 		_skip_any(ctx) or_return
-		return 
+		return
 	}
 
 	value := read_int16(ctx) or_return
@@ -195,7 +194,7 @@ current_is_binary :: proc(ctx: ^Read_Context) -> bool {
 		case .Bin8, .Bin16, .Bin32: return true
 	}
 
-	return false	
+	return false
 }
 
 current_is_array :: proc(ctx: ^Read_Context) -> bool {
@@ -203,7 +202,7 @@ current_is_array :: proc(ctx: ^Read_Context) -> bool {
 		case .Fix_Array, .Array16, .Array32: return true
 	}
 
-	return false	
+	return false
 }
 
 current_is_map :: proc(ctx: ^Read_Context) -> bool {
@@ -211,7 +210,7 @@ current_is_map :: proc(ctx: ^Read_Context) -> bool {
 		case .Fix_Map, .Map16, .Map32: return true
 	}
 
-	return false	
+	return false
 }
 
 current_is_string :: proc(ctx: ^Read_Context) -> bool {
@@ -219,7 +218,7 @@ current_is_string :: proc(ctx: ^Read_Context) -> bool {
 		case .Fix_Str, .Str8, .Str16, .Str32: return true
 	}
 
-	return false	
+	return false
 }
 
 current_is_fix_ext :: proc(ctx: ^Read_Context) -> bool {
@@ -227,7 +226,7 @@ current_is_fix_ext :: proc(ctx: ^Read_Context) -> bool {
 		case .Fix_Ext1, .Fix_Ext2, .Fix_Ext4, .Fix_Ext8, .Fix_Ext16: return true
 	}
 
-	return false	
+	return false
 }
 
 current_is_ext :: proc(ctx: ^Read_Context) -> bool {
@@ -235,7 +234,7 @@ current_is_ext :: proc(ctx: ^Read_Context) -> bool {
 		case .Ext8, .Ext16, .Ext32: return true
 	}
 
-	return false	
+	return false
 }
 
 // iterate through array content uintptrs
@@ -263,7 +262,7 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 	for i in 0..<length {
 		previous_format = ctx.current_format
 		_skip_any(ctx) or_return
-		
+
 		if i != 0 && previous_format != ctx.current_format {
 			// fmt.println("prev", previous_format, ctx.current_format)
 			ok = false
@@ -276,22 +275,22 @@ array_has_same_types :: proc(ctx: ^Read_Context, length: int) -> (ok: bool, err:
 
 	// if all the same, reset input
 	ctx.input = old
-	return 
+	return
 }
 
 // avoid duplicate code _Array and _Enumerated_Array
 _unmarshal_array_check :: proc(
-	ctx: ^Read_Context, 
-	array_length: int, 
-	element_type: typeid, 
-	element_size: int, 
+	ctx: ^Read_Context,
+	array_length: int,
+	element_type: typeid,
+	element_size: int,
 	v: any,
 ) -> (err: Read_Error) {
 	// NOTE BINARY support: only allow exact array size match with binary
 	if element_type == byte {
 		// validate current is binary
 		if current_is_binary(ctx) {
-			binary_bytes := read_bin(ctx) or_return
+			binary_bytes := read_bin(ctx, ctx.current_format) or_return
 
 			if array_length == len(binary_bytes) {
 				mem.copy(v.data, &binary_bytes[0], array_length)
@@ -301,7 +300,7 @@ _unmarshal_array_check :: proc(
 		}
 	} else {
 		if current_is_array(ctx) {
-			length := read_array(ctx) or_return
+			length := read_array(ctx, ctx.current_format) or_return
 
 			// NOTE read has to match array count
 			if array_length == length {
@@ -331,7 +330,7 @@ _unmarshal_array_check :: proc(
 unmarshal :: proc(v: any, bytes: []byte, allocator := context.allocator) -> (err: Read_Error) {
 	ctx := read_context_scoped(bytes)
 	unmarshal_ctx(&ctx, v, allocator) or_return
-	return 
+	return
 }
 
 // unmarshal incoming any to exact type in ctx.current_format
@@ -344,16 +343,17 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 		return
 	}
 
-	b := read_byte(ctx) or_return
-	ctx.current_format = format_clamp(b)
+	format := read_format(ctx) or_return
+	ctx.current_format = format
 
 	if ctx.verbose {
-		fmt.println("current:", ctx.current_format, v, ti.id)
+		fmt.eprintf("FORMAT: %v\tANY: %v\n", ctx.current_format, v)
+		fmt.eprintf("\tTYPE: %v\n", ti.id)
 	}
 
 	// check for fix extensions, call its proc, return early
 	if current_is_fix_ext(ctx) {
-		extension, bytes := read_fix_ext(ctx) or_return
+		extension, bytes := read_fix_ext(ctx, ctx.current_format) or_return
 
 		if call, ok := custom_extension_read[extension]; ok {
 			call(ctx, bytes, v) or_return
@@ -392,7 +392,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				}
 			}
 		}
-	
+
 		// input any is float, match read format, parse value, throw away f16
 		case runtime.Type_Info_Float: {
 			if a.id == f32 && ctx.current_format == .Float32 {
@@ -431,7 +431,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 		// NOTE allocates memory
 		case runtime.Type_Info_String: {
 			if current_is_string(ctx) {
-				text := read_string(ctx) or_return
+				text := read_string(ctx, ctx.current_format) or_return
 
 				switch s in a {
 					case string: {
@@ -459,7 +459,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				result := read_rune(ctx) or_return
 				r^ = result
 			} else {
-				_skip_any(ctx) or_return				
+				_skip_any(ctx) or_return
 			}
 		}
 
@@ -477,7 +477,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 			if info.elem.id == byte {
 				// validate current is binary
 				if current_is_binary(ctx) {
-					binary_bytes := read_bin(ctx) or_return
+					binary_bytes := read_bin(ctx, ctx.current_format) or_return
 
 					if binary_bytes == nil {
 						return
@@ -487,7 +487,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 					if raw_slice != nil {
 						// TODO pass loc?
 						free(raw_slice.data, allocator)
-					} 
+					}
 
 					cloned_result := slice.clone(binary_bytes)
 					raw_slice.data = &cloned_result[0]
@@ -497,7 +497,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				}
 			} else {
 				if current_is_array(ctx) {
-					length := read_array(ctx) or_return
+					length := read_array(ctx, ctx.current_format) or_return
 
 					if length == 0 {
 						return
@@ -513,7 +513,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				} else {
 					_skip_any(ctx) or_return
 				}
-			}	
+			}
 		}
 
 		// may resize underlying array to new size
@@ -524,7 +524,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 			if info.elem.id == byte {
 				// validate current is binary
 				if current_is_binary(ctx) {
-					binary_bytes := read_bin(ctx) or_return
+					binary_bytes := read_bin(ctx, ctx.current_format) or_return
 					size := len(binary_bytes)
 
 					// reserve till size, set size, mem copy region
@@ -536,9 +536,9 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				}
 			} else {
 				if current_is_array(ctx) {
-					length := read_array(ctx) or_return
+					length := read_array(ctx, ctx.current_format) or_return
 
-					// TODO restrict to odin only single type		
+					// TODO restrict to odin only single type
 
 					// NOTE resets raw array size
 					raw_array.len = length
@@ -552,13 +552,13 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 
 		case runtime.Type_Info_Map: {
 			m := (^runtime.Raw_Map)(a.data)
-			
+
 			if m == nil || info.generated_struct == nil || !current_is_map(ctx) {
 				_skip_any(ctx) or_return
 				return
 			}
 
-			length := read_map(ctx) or_return
+			length := read_map(ctx, ctx.current_format) or_return
 			if length == 0 {
 				// NOTE no skip needed
 				return
@@ -601,13 +601,13 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 
 				key := rawptr(data + entry_type.offsets[2])
 				value := rawptr(data + entry_type.offsets[3])
-		
+
 				key_any := any { key, info.key.id }
 				value_any := any { value, info.value.id }
 				unmarshal_ctx(ctx, key_any, allocator) or_return
 				unmarshal_ctx(ctx, value_any, allocator) or_return
 
-				// update entry hash				
+				// update entry hash
 				(cast(^uintptr) (data + entry_type.offsets[0]))^ = info.key_hasher(key, 0)
 			}
 
@@ -617,7 +617,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 		// fixed extension type id
 		case runtime.Type_Info_Type_Id: {
 			if current_is_fix_ext(ctx) {
-				type, bytes := read_fix_ext(ctx) or_return
+				type, bytes := read_fix_ext(ctx, ctx.current_format) or_return
 
 				if type == i8(Extension.Type_Id) {
 					ptr := cast(^typeid) a.data
@@ -636,16 +636,16 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 				return
 			}
 
-			tags_empty := len(info.tags) == 0 
-			length := read_map(ctx) or_return
+			tags_empty := len(info.tags) == 0
+			length := read_map(ctx, ctx.current_format) or_return
 			length_count: int
 
 			length_loop: for length_count != length {
 				ctx.current_format = format_clamp(input[0])
 
-				// has to be a valid string value, otherwhise doesnt match struct write_any  
+				// has to be a valid string value, otherwhise doesnt match struct write_any
 				if current_is_string(ctx) {
-					text := read_string(ctx) or_return
+					text := read_string(ctx, ctx.current_format) or_return
 					// fmt.println("SEARCH", text, length_count)
 
 					name_search: for name, i in info.names {
@@ -661,7 +661,7 @@ unmarshal_ctx :: proc(using ctx: ^Read_Context, v: any, allocator := context.all
 							length_count += 1
 							continue length_loop
 						}
-					}			
+					}
 				} else {
 					// skip non string key without count increase
 					_skip_any(ctx) or_return
@@ -725,10 +725,10 @@ make_slice_raw :: proc(
 	raw_slice: ^mem.Raw_Slice,
 
 	type: typeid,
-	#any_int len: int, 
-	alignment: int, 
+	#any_int len: int,
+	alignment: int,
 
-	allocator := context.allocator, 
+	allocator := context.allocator,
 	loc := #caller_location,
 ) {
 	runtime.make_slice_error_loc(loc, len)

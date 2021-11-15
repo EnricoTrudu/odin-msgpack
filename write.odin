@@ -11,7 +11,7 @@ Write_Context :: struct {
 	start: []byte,
 	output: []byte,
 	verbose: bool, // print info from marshal
-	
+
 	typeid_map: map[typeid]u8,
 	typeid_any: map[typeid]Write_Custom_Proc,
 }
@@ -19,9 +19,9 @@ Write_Context :: struct {
 // errors that can appear while reading
 Write_Error :: enum {
 	None,
-	
+
 	Overflow_Buffer,    // not enough memory provided for context
-	Overflow_String,    // spec: non supported string     length  
+	Overflow_String,    // spec: non supported string     length
 	Overflow_Binary,    // spec: non supported binary     length
 	Overflow_Array,	    // spec: non supported array      length
 	Overflow_Map,       // spec: non supported array      length
@@ -66,10 +66,10 @@ write_context_add_typeid :: proc(using ctx: ^Write_Context, type: typeid) {
 	typeid_map[type] = u8(len(typeid_map))
 }
 
-// add multiple typeids 
+// add multiple typeids
 write_context_add_typeids :: proc(using ctx: ^Write_Context, types: []typeid) {
 	assert(len(typeid_map) < 256)
-	
+
 	for type in types {
 		typeid_map[type] = u8(len(typeid_map))
 	}
@@ -77,13 +77,13 @@ write_context_add_typeids :: proc(using ctx: ^Write_Context, types: []typeid) {
 
 // add custom typeid conversion to msgpack data
 write_context_add_typeid_any :: proc(
-	using ctx: ^Write_Context, 
-	type: typeid, 
+	using ctx: ^Write_Context,
+	type: typeid,
 	call: Write_Custom_Proc,
 ) {
 	if type not_in typeid_any {
 		typeid_any[type] = call
-	} 
+	}
 }
 
 // write a single byte into output
@@ -110,7 +110,7 @@ write_bytes :: proc(using ctx: ^Write_Context, ptr: rawptr, size: int) -> Write_
 
 // helper conversion + implicit enum
 write_format :: #force_inline proc(using ctx: ^Write_Context, format: Format) -> Write_Error {
-	return write_byte(ctx, transmute(byte) format)	
+	return write_byte(ctx, transmute(byte) format)
 }
 
 // write .True or .False next
@@ -140,7 +140,7 @@ write_negative_fix_int :: proc(using ctx: ^Write_Context, value: u8) -> Write_Er
 // write .Uint8 next + value content
 write_uint8 :: proc(using ctx: ^Write_Context, value: u8) -> Write_Error {
 	write_format(ctx, .Uint8) or_return
-	return write_byte(ctx, value) 
+	return write_byte(ctx, value)
 }
 
 // write .Uint16 next + value content
@@ -227,12 +227,16 @@ write_float :: proc {
 
 // TODO inspect strings len(str) usage - use utf8.rune_count instead
 
-// write .Fix_Str with string length included first 5 bits + string content clamped 
+import "core:fmt"
+
+// write .Fix_Str with string length included first 5 bits + string content clamped
 write_fix_str :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	clamped_length := clamp(len(text), 0, 31)
 	value := u8(clamped_length)
 	value |= byte(Format.Fix_Str)
 	write_byte(ctx, value) or_return
+
+  fmt.printf("WRITE %d, %x %d %x\n", clamped_length, value, value, ctx.start[:1])
 
 	data := mem.raw_string_data(text)
 	return write_bytes(ctx, data, clamped_length)
@@ -249,16 +253,16 @@ write_rune :: proc(using ctx: ^Write_Context, r: rune) -> Write_Error {
 	return write_bytes(ctx, &bytes[0], length)
 }
 
-// write .Str8 + string length as u8 + string content clamped 
+// write .Str8 + string length as u8 + string content clamped
 write_str8 :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	write_format(ctx, .Str8) or_return
-	
+
 	// clamp to 2^8-1
 	clamped_length := clamp(len(text), 0, 255)
 	write_byte(ctx, u8(clamped_length)) or_return
 
 	data := mem.raw_string_data(text)
-	return write_bytes(ctx, data, clamped_length)	
+	return write_bytes(ctx, data, clamped_length)
 }
 
 // write .Str16 + string length as u16be + string content clamped
@@ -271,7 +275,7 @@ write_str16 :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	write_bytes(ctx, &value, 2) or_return
 
 	data := mem.raw_string_data(text)
-	return write_bytes(ctx, data, clamped_length)	
+	return write_bytes(ctx, data, clamped_length)
 }
 
 // write .Str32 + string length as u32be + string content clamped
@@ -284,14 +288,14 @@ write_str32 :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	write_bytes(ctx, &value, 4) or_return
 
 	data := mem.raw_string_data(text)
-	return write_bytes(ctx, data, clamped_length)	
+	return write_bytes(ctx, data, clamped_length)
 }
 
 // write string and choose format automaticall based on length
 write_string :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 	length := len(text)
 	data := mem.raw_string_data(text)
-	
+
 	if length < 32 {
 		value := u8(length)
 		value |= byte(Format.Fix_Str)
@@ -311,7 +315,7 @@ write_string :: proc(using ctx: ^Write_Context, text: string) -> Write_Error {
 		return .Overflow_String
 	}
 
-	return write_bytes(ctx, data, length) 
+	return write_bytes(ctx, data, length)
 }
 
 _write_bin_format :: proc(ctx: ^Write_Context, length: int) -> Write_Error {
@@ -378,7 +382,7 @@ _write_map_format :: proc(ctx: ^Write_Context, length: int) -> Write_Error {
 		return .Overflow_Map
 	}
 
-	return .None		
+	return .None
 }
 
 // extension calls

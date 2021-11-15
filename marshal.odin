@@ -42,6 +42,10 @@ marshal_ctx :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 		} 
 	}
 
+	if ctx.verbose {
+		fmt.eprintln("STEP", v.id, ti.id)
+	}
+
 	#partial switch info in ti.variant {
 		case runtime.Type_Info_Pointer: {
 			return .Pointer_Unsupported
@@ -239,7 +243,7 @@ marshal_ctx :: proc(using ctx: ^Write_Context, v: any) -> Write_Error {
 
 		case: {
 			if ctx.verbose {
-				fmt.println("ANY_TYPE_UNSUPPORTED", v)
+				fmt.eprintln("ANY_TYPE_UNSUPPORTED", v)
 			}
 
 			return .Any_Type_Unsupported

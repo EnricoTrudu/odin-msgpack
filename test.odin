@@ -9,13 +9,13 @@ import "core:os"
 
 // helper to write / read back results
 test_read_write :: proc(
-	write: proc(ctx: ^Write_Context) -> Write_Error, 
+	write: proc(ctx: ^Write_Context) -> Write_Error,
 	read: proc(ctx: ^Read_Context) -> Read_Error,
 	capacity: int,
 ) {
 	write_ctx := write_context_init(capacity)
 	defer write_context_destroy(write_ctx)
-	
+
 	err := write(&write_ctx)
 	if err != .None {
 		fmt.panicf("WRITE FAILED: %v", err)
@@ -48,8 +48,8 @@ test_typeid :: proc() {
 
 		test: typeid
 		fmt.println("before", test)
-		read_format(ctx) or_return
-		type, bytes := read_fix_ext(ctx) or_return
+		format := read_format(ctx) or_return
+		type, bytes := read_fix_ext(ctx, format) or_return
 		test = read_typeid(ctx, type, bytes) or_return
 		fmt.println("after", test)
 		return .None
@@ -155,7 +155,7 @@ test_array_any :: proc() {
 		fmt.println("after", test)
 		return .None
 	}
-	
+
 	read_same_size :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [10]int
 		fmt.println("before", test)
@@ -164,8 +164,8 @@ test_array_any :: proc() {
 		return .None
 	}
 
-	test_read_write(write, read_bad_size, mem.kilobytes(1))		
-	test_read_write(write, read_same_size, mem.kilobytes(1))		
+	test_read_write(write, read_bad_size, mem.kilobytes(1))
+	test_read_write(write, read_same_size, mem.kilobytes(1))
 }
 
 test_enum_array_any :: proc() {
@@ -183,7 +183,7 @@ test_enum_array_any :: proc() {
 		marshal_ctx(ctx, test) or_return
 		return .None
 	}
-	
+
 	read :: proc(ctx: ^Read_Context) -> Read_Error {
 		test: [Some_Enum]int
 		fmt.println("before", test)
@@ -192,7 +192,7 @@ test_enum_array_any :: proc() {
 		return .None
 	}
 
-	test_read_write(write, read, mem.kilobytes(1))		
+	test_read_write(write, read, mem.kilobytes(1))
 }
 
 test_binary_array :: proc() {
@@ -212,7 +212,7 @@ test_binary_array :: proc() {
 		return .None
 	}
 
-	test_read_write(write, read, mem.kilobytes(1))		
+	test_read_write(write, read, mem.kilobytes(1))
 }
 
 test_slice_any :: proc() {
@@ -234,7 +234,7 @@ test_slice_any :: proc() {
 		return .None
 	}
 
-	test_read_write(write, read, mem.kilobytes(1))		
+	test_read_write(write, read, mem.kilobytes(1))
 }
 
 test_binary_slice_any :: proc() {
@@ -290,9 +290,9 @@ test_map :: proc() {
 			marshal_ctx(ctx, test) or_return
 		} else {
 			_write_map_format(ctx, 2) or_return
-			write_int8(ctx, 0) or_return 
+			write_int8(ctx, 0) or_return
 			write_uint8(ctx, 255) or_return
-			write_int8(ctx, 1) or_return 
+			write_int8(ctx, 1) or_return
 			write_uint8(ctx, 254) or_return
 		}
 
@@ -304,11 +304,11 @@ test_map :: proc() {
 		// test: map[string]int
 		test: map[i8]u8
 		defer delete(test)
-		
+
 		fmt.println("before", test, len(test), cap(test))
-		
-		read_format(ctx) or_return
-		length := read_map(ctx) or_return
+
+		format := read_format(ctx) or_return
+		length := read_map(ctx, format) or_return
 
 		for _ in 0..<length {
 			read_format(ctx)
@@ -317,7 +317,7 @@ test_map :: proc() {
 			value := read_uint8(ctx) or_return
 			test[key] = value
 		}
-		
+
 		fmt.println("after", test, len(test), cap(test))
 		return .None
 	}
@@ -420,7 +420,7 @@ test_write_basics :: proc(ctx: ^Write_Context) -> Write_Error {
 	return .None
 }
 
-test_write_bytes :: proc(ctx: ^Write_Context) -> Write_Error {	
+test_write_bytes :: proc(ctx: ^Write_Context) -> Write_Error {
 	write_fix_str(ctx, "yo guyssddddddddddddddddaaaaaaaaaaaaaaddddddd") or_return
 	write_fix_str(ctx, "yo guys") or_return
 	write_str8(ctx, "yoooooo") or_return
@@ -428,13 +428,13 @@ test_write_bytes :: proc(ctx: ^Write_Context) -> Write_Error {
 	write_str32(ctx, "sup guys") or_return
 
 	write_bin(ctx, { 1, 132, 123, 123 }) or_return
-	
+
 	garbage := make([]byte, 256)
 	garbage[len(garbage) - 1] = 1
 	defer delete(garbage)
 	write_bin(ctx, garbage[:]) or_return
 
-	return .None	
+	return .None
 }
 
 test_write_arrays :: proc(ctx: ^Write_Context) -> Write_Error {
@@ -495,8 +495,8 @@ test_write_struct :: proc(ctx: ^Write_Context) -> Write_Error {
 		inner: TestInner,
 	}
 
-	test := Testing { 
-		a = 10, 
+	test := Testing {
+		a = 10,
 		b = "yo guys",
 		inner = {
 			c = 244,
